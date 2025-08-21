@@ -1,23 +1,22 @@
-node_modules
+# Dependencies
+node_modules/
 
 # Next.js
 .next/
 out/
+build/
 
-# Backup folders
-backup_core/
-backup_core2/
-backups/
-*.zip
+# Production
+/build
 
-# Development
-.vscode/
+# Environment variables
+.env
 .env.local
 .env.development.local
 .env.test.local
 .env.production.local
 
-# Logs
+# Debug logs
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
@@ -27,3 +26,45 @@ pids
 *.pid
 *.seed
 *.pid.lock
+
+# Coverage directory used by tools like istanbul
+coverage/
+
+# nyc test coverage
+.nyc_output
+
+# Dependency directories
+jspm_packages/
+
+# Optional npm cache directory
+.npm
+
+# Optional REPL history
+.node_repl_history
+
+# Output of 'npm pack'
+*.tgz
+
+# Yarn Integrity file
+.yarn-integrity
+
+# dotenv environment variables file
+.env
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+logs
+*.log
+
+# Temporary folders
+tmp/
+temp/
