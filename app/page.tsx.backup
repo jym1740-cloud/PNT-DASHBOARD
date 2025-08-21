@@ -1,0 +1,570 @@
+"use client";
+import React, { useState, useMemo, useEffect } from "react";
+
+// CSS는 app/globals.css에서 통합 관리
+
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { motion } from "framer-motion";
+import { FileText, TrendingUp, AlertTriangle, Clock, DollarSign, Map, HelpCircle } from "lucide-react";
+import WorldMap from "@/components/WorldMap";
+import ProjectTable from "@/components/ProjectTable";
+import StatusOverview from "@/components/StatusOverview";
+import DashboardHeader from "@/components/DashboardHeader";
+import FloatingActions from "@/components/FloatingActions";
+import EquipmentHistoryTable from "@/components/EquipmentHistoryTable";
+
+
+
+import { filterProjects, calculateStats } from "@/lib/projectUtils";
+import { seedProjects } from "@/lib/sampleData";
+import { Project, ProjectStatus } from "@/lib/types";
+
+export default function CompanyOpsDashboard() {
+  const [mounted, setMounted] = useState(false);
+  const [projects, setProjects] = useState(seedProjects);
+  const [query, setQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<string | undefined>(undefined);
+  const [equipmentHistory, setEquipmentHistory] = useState<any[]>([]);
+  const [equipmentHistoryOpen, setEquipmentHistoryOpen] = useState(false);
+  
+  // 프로젝트 편집을 위한 상태
+  const [selected, setSelected] = useState<any | null>(null);
+  const [open, setOpen] = useState(false);
+  
+  // 일정 관리를 위한 상태
+  const [scheduleOpen, setScheduleOpen] = useState(false);
+  const [selectedSchedule, setSelectedSchedule] = useState<any | null>(null);
+  const [scheduleItems, setScheduleItems] = useState<any[]>([]);
+  const [people, setPeople] = useState<Array<{ id: string; name: string; affiliation: string; department: string }>>([]);
+
+
+  // 컴포넌트 마운트 확인
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  // 프로젝트 편집 핸들러
+  function onEdit(p: any) {
+    setSelected({ ...p });
+    setEquipmentHistory(p.equipmentHistory || []);
+    setOpen(true);
+  }
+
+  // 일정 관리 핸들러
+  function onSchedule(p: any) {
+    setSelectedSchedule({ ...p });
+    setScheduleItems(p.scheduleItems || []);
+    // 초기 인원 목록 구성: 저장된 people만 사용, 기본 인원 생성 안함
+    const initialPeople: Array<{ id: string; name: string; affiliation: string; department: string }> = (p.people && Array.isArray(p.people))
+      ? p.people
+      : [];
+    setPeople(initialPeople);
+    setScheduleOpen(true);
+  }
+
+  // 장비 이력 핸들러
+  function onEquipmentHistory(p: any) {
+    setSelected({ ...p });
+    setEquipmentHistory(p.equipmentHistory || []);
+    setEquipmentHistoryOpen(true);
+  }
+
+  // 프로젝트 삭제 핸들러
+  function onDelete(id: string) {
+    setProjects((prev) => prev.filter((p) => p.id !== id));
+  }
+
+  // 프로젝트 저장 핸들러
+  function onSave() {
+    // 투입률 계산 및 상태 자동 변경
+    let updatedProject = { ...selected, equipmentHistory };
+    if (updatedProject.budget > 0) {
+      const costRatio = (updatedProject.actualCost / updatedProject.budget) * 100;
+      if (costRatio > 70) {
+        updatedProject.status = "진행 중(관리필요)";
+      }
+    }
+    
+    setProjects((prev) => {
+      const exists = prev.some((p) => p.id === selected.id);
+      if (exists) return prev.map((p) => (p.id === selected.id ? updatedProject : p));
+      return [updatedProject, ...prev];
+    });
+    setOpen(false);
+  }
+
+  // 일정 저장 핸들러
+  function saveSchedule() {
+    if (selectedSchedule) {
+      // 선택된 프로젝트의 일정 항목 업데이트
+      const updatedProject = {
+        ...selectedSchedule,
+        scheduleItems: scheduleItems,
+        people: people
+      };
+      
+      // 프로젝트 목록 업데이트
+      setProjects(prev => prev.map(p => 
+        p.id === selectedSchedule.id ? updatedProject : p
+      ));
+      
+      // 성공 메시지
+      alert('일정이 저장되었습니다!');
+    }
+  }
+
+  // 프로젝트 필터링
+  const filteredProjects = useMemo(() => 
+    filterProjects(projects, query, statusFilter), 
+    [projects, query, statusFilter]
+  );
+
+  // 통계 계산
+  const stats = useMemo(() => calculateStats(projects), [projects]);
+
+  // 프로젝트 업데이트 핸들러
+  const handleProjectUpdate = (updatedProjects: Project[]) => {
+    setProjects(updatedProjects);
+  };
+
+
+
+
+
+  if (!mounted) return null;
+
+  return (
+    <>
+      <div className="min-h-screen bg-gray-50">
+        {/* 헤더 */}
+        <DashboardHeader 
+          query={query}
+          onQueryChange={setQuery}
+          statusFilter={statusFilter}
+          onStatusFilterChange={setStatusFilter}
+          onCreate={() => {
+            // 프로젝트 생성 후 프로젝트 섹션으로 스크롤
+            document.querySelector('#projects-section')?.scrollIntoView({ behavior: 'smooth' });
+          }}
+          onHelpOpen={() => {}}
+        />
+
+        {/* 메인 컨텐츠 */}
+        <main className="max-w-7xl mx-auto p-6 space-y-6">
+          {/* 통계 개요 */}
+          <StatusOverview projects={projects} />
+
+          {/* 검색 및 필터 */}
+          <div className="flex flex-col sm:flex-row gap-4">
+            <div className="flex-1">
+              <Input
+                placeholder="프로젝트 검색..."
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                className="w-full"
+              />
+            </div>
+            <Select value={statusFilter || "all"} onValueChange={(value) => setStatusFilter(value === "all" ? undefined : value)}>
+              <SelectTrigger className="w-full sm:w-48">
+                <SelectValue placeholder="상태별 필터" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">전체</SelectItem>
+                <SelectItem value="planning">계획</SelectItem>
+                <SelectItem value="active">진행중</SelectItem>
+                <SelectItem value="management">관리</SelectItem>
+                <SelectItem value="hold">보류</SelectItem>
+                <SelectItem value="completed">완료</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* 월드맵 섹션 */}
+          <div id="overview-section" className="space-y-6">
+            <div className="flex items-center gap-2">
+              <Map className="w-6 h-6 text-blue-600" />
+              <h2 className="text-2xl font-bold text-gray-900">월드맵</h2>
+            </div>
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.3 }}
+            >
+              <WorldMap projects={filteredProjects} />
+            </motion.div>
+          </div>
+
+          {/* 프로젝트 테이블 섹션 */}
+          <div id="projects-section" className="space-y-6">
+            <div className="flex items-center gap-2">
+              <FileText className="w-6 h-6 text-green-600" />
+              <h2 className="text-2xl font-bold text-gray-900">프로젝트 목록</h2>
+            </div>
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.3 }}
+              className="space-y-6"
+            >
+              <ProjectTable 
+                projects={filteredProjects}
+                onEdit={onEdit}
+                onSchedule={onSchedule}
+                onEquipmentHistory={onEquipmentHistory}
+                onDelete={onDelete}
+              />
+            </motion.div>
+          </div>
+
+          
+
+
+
+          {/* 플로팅 액션 */}
+          <FloatingActions
+            onCreate={() => {
+              // 프로젝트 생성 후 프로젝트 섹션으로 스크롤
+              document.querySelector('#projects-section')?.scrollIntoView({ behavior: 'smooth' });
+            }}
+            onOverview={() => {
+              // 월드맵 섹션으로 스크롤
+              document.querySelector('#overview-section')?.scrollIntoView({ behavior: 'smooth' });
+            }}
+            onProjects={() => {
+              // 프로젝트 섹션으로 스크롤
+              document.querySelector('#projects-section')?.scrollIntoView({ behavior: 'smooth' });
+            }}
+          />
+        </main>
+
+        {/* 장비 이력 다이얼로그 */}
+        {equipmentHistoryOpen && (
+          <EquipmentHistoryTable
+            equipmentHistory={equipmentHistory}
+            onUpdate={(id, field, value) => {
+              // 장비 이력 업데이트 로직 구현 필요
+              console.log('Update equipment history:', id, field, value);
+            }}
+            onDelete={(id) => {
+              // 장비 이력 삭제 로직 구현 필요
+              console.log('Delete equipment history:', id);
+            }}
+          />
+        )}
+
+        {/* 프로젝트 편집 모달 */}
+        {open && selected && (
+          <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-lg p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-xl font-semibold">
+                  {selected.pjtNo ? "프로젝트 수정" : "신규 프로젝트"}
+                </h2>
+                <button
+                  onClick={() => setOpen(false)}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  ✕
+                </button>
+              </div>
+              
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">PJT NO</label>
+                  <Input
+                    value={selected.pjtNo || ""}
+                    onChange={(e) => setSelected({ ...selected, pjtNo: e.target.value })}
+                    placeholder="예: PJT-25001"
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">프로젝트명</label>
+                  <Input
+                    value={selected.name || ""}
+                    onChange={(e) => setSelected({ ...selected, name: e.target.value })}
+                    placeholder="예: Dryer Retrofit"
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">상태</label>
+                  <Select
+                    value={selected.status || "계획"}
+                    onValueChange={(value) => setSelected({ ...selected, status: value })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="계획">계획</SelectItem>
+                      <SelectItem value="진행 중">진행 중</SelectItem>
+                      <SelectItem value="진행 중(관리필요)">진행 중(관리필요)</SelectItem>
+                      <SelectItem value="일시 중단">일시 중단</SelectItem>
+                      <SelectItem value="완료">완료</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">PM</label>
+                  <Input
+                    value={selected.pm || ""}
+                    onChange={(e) => setSelected({ ...selected, pm: e.target.value })}
+                    placeholder="프로젝트 매니저"
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">예산 (KRW)</label>
+                  <Input
+                    type="number"
+                    value={selected.budget || 0}
+                    onChange={(e) => setSelected({ ...selected, budget: Number(e.target.value) })}
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">투입원가 (KRW)</label>
+                  <Input
+                    type="number"
+                    value={selected.actualCost || 0}
+                    onChange={(e) => setSelected({ ...selected, actualCost: Number(e.target.value) })}
+                    placeholder="실제 지출된 비용"
+                  />
+                  {selected.budget > 0 && (
+                    <div className="mt-2 p-2 bg-gray-50 rounded text-xs">
+                      <div className="flex justify-between items-center mb-1">
+                        <span className="text-gray-600">현재 투입률:</span>
+                        <span className={`font-medium ${(selected.actualCost / selected.budget) * 100 > 80 ? 'text-red-600' : (selected.actualCost / selected.budget) * 100 > 70 ? 'text-amber-600' : 'text-green-600'}`}>
+                          {((selected.actualCost / selected.budget) * 100).toFixed(1)}%
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">비고</label>
+                  <textarea
+                    value={selected.note || ""}
+                    onChange={(e) => setSelected({ ...selected, note: e.target.value })}
+                    placeholder="메모"
+                    className="w-full p-2 border border-gray-300 rounded-md resize-none"
+                    rows={3}
+                  />
+                </div>
+              </div>
+              
+              <div className="flex justify-end gap-2 mt-6">
+                <Button variant="outline" onClick={() => setOpen(false)}>
+                  취소
+                </Button>
+                <Button onClick={onSave}>
+                  저장
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* 일정 관리 모달 */}
+        {scheduleOpen && selectedSchedule && (
+          <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-lg p-6 max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-xl font-semibold">
+                  일정 관리 - {selectedSchedule.name || "프로젝트"}
+                </h2>
+                <button
+                  onClick={() => setScheduleOpen(false)}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  ✕
+                </button>
+              </div>
+              
+              <div className="space-y-4">
+                <div className="bg-gray-50 rounded-lg p-4">
+                  <div className="grid grid-cols-2 gap-4 text-sm">
+                    <div>
+                      <span className="font-medium text-gray-700">프로젝트 번호:</span>
+                      <span className="ml-2 text-gray-600">{selectedSchedule.pjtNo}</span>
+                    </div>
+                    <div>
+                      <span className="font-medium text-gray-700">상태:</span>
+                      <span className="ml-2 text-sm font-medium text-gray-900">
+                        {selectedSchedule.status || "상태 없음"}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+                
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <h3 className="text-lg font-medium">일정 항목</h3>
+                    <Button
+                      onClick={() => {
+                        const newItem = {
+                          id: Math.random().toString(36).slice(2),
+                          name: "새 일정",
+                          startDate: "",
+                          endDate: "",
+                          progress: 0
+                        };
+                        setScheduleItems(prev => [...prev, newItem]);
+                      }}
+                      size="sm"
+                    >
+                      + 일정 추가
+                    </Button>
+                  </div>
+                  
+                  <div className="space-y-2">
+                    {scheduleItems.map((item, index) => (
+                      <div key={item.id} className="flex gap-2 p-2 border rounded">
+                        <Input
+                          value={item.name}
+                          onChange={(e) => {
+                            const newItems = [...scheduleItems];
+                            newItems[index].name = e.target.value;
+                            setScheduleItems(newItems);
+                          }}
+                          placeholder="일정명"
+                          className="flex-1"
+                        />
+                        <Input
+                          type="date"
+                          value={item.startDate}
+                          onChange={(e) => {
+                            const newItems = [...scheduleItems];
+                            newItems[index].startDate = e.target.value;
+                            setScheduleItems(newItems);
+                          }}
+                        />
+                        <Input
+                          type="date"
+                          value={item.endDate}
+                          onChange={(e) => {
+                            const newItems = [...scheduleItems];
+                            newItems[index].endDate = e.target.value;
+                            setScheduleItems(newItems);
+                          }}
+                        />
+                        <Input
+                          type="number"
+                          min="0"
+                          max="100"
+                          value={item.progress}
+                          onChange={(e) => {
+                            const newItems = [...scheduleItems];
+                            newItems[index].progress = parseInt(e.target.value) || 0;
+                            setScheduleItems(newItems);
+                          }}
+                          className="w-20"
+                          placeholder="%"
+                        />
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            setScheduleItems(prev => prev.filter((_, i) => i !== index));
+                          }}
+                        >
+                          삭제
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <h3 className="text-lg font-medium">담당자</h3>
+                    <Button
+                      onClick={() => {
+                        const newPerson = { 
+                          id: Math.random().toString(36).slice(2), 
+                          name: '', 
+                          affiliation: '피엔티', 
+                          department: '' 
+                        };
+                        setPeople(prev => [...prev, newPerson]);
+                      }}
+                      size="sm"
+                    >
+                      + 담당자 추가
+                    </Button>
+                  </div>
+                  
+                  <div className="space-y-2">
+                    {people.map((person, index) => (
+                      <div key={person.id} className="flex gap-2 p-2 border rounded">
+                        <Input
+                          value={person.name}
+                          onChange={(e) => {
+                            const newPeople = [...people];
+                            newPeople[index].name = e.target.value;
+                            setPeople(newPeople);
+                          }}
+                          placeholder="이름"
+                          className="flex-1"
+                        />
+                        <Input
+                          value={person.affiliation}
+                          onChange={(e) => {
+                            const newPeople = [...people];
+                            newPeople[index].affiliation = e.target.value;
+                            setPeople(newPeople);
+                          }}
+                          placeholder="소속"
+                          className="flex-1"
+                        />
+                        <Input
+                          value={person.department}
+                          onChange={(e) => {
+                            const newPeople = [...people];
+                            newPeople[index].department = e.target.value;
+                            setPeople(newPeople);
+                          }}
+                          placeholder="부서"
+                          className="flex-1"
+                        />
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            setPeople(prev => prev.filter((_, i) => i !== index));
+                          }}
+                        >
+                          삭제
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+              
+              <div className="flex justify-end gap-2 mt-6">
+                <Button variant="outline" onClick={() => setScheduleOpen(false)}>
+                  취소
+                </Button>
+                <Button onClick={saveSchedule}>
+                  저장
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Footer */}
+        <footer className="max-w-7xl mx-auto p-6 text-xs text-zinc-500 space-y-1">
+          <div>ⓘ 프로토타입: 로컬 상태로 동작 (DB 없음). 다음 단계: 필드 스키마 확정 → API 연결 → 권한/로그인.</div>
+          <div>🗺️ OpenStreetMap Geocoding: 무료 API 사용 중 (API 키 불필요)</div>
+        </footer>
+      </div>
+    </>
+  );
+}

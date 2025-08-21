@@ -1,0 +1,552 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ===== 기본 스타일 ===== */
+body {
+  margin: 0;
+  padding: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ===== LEAFLET 지도 스타일 ===== */
+.leaflet-container {
+  z-index: 1;
+}
+
+.leaflet-pane {
+  z-index: 1;
+}
+
+.leaflet-control {
+  z-index: 2;
+}
+
+.leaflet-overlay-pane {
+  z-index: 1;
+}
+
+.leaflet-tile-pane {
+  z-index: 1;
+}
+
+.leaflet-tile {
+  border: 0;
+  outline: 0;
+}
+
+.leaflet-tile-container {
+  border: 0;
+  outline: 0;
+}
+
+.leaflet-layer {
+  border: 0;
+  outline: 0;
+}
+
+/* 줌 컨트롤 스타일 */
+.leaflet-control-zoom {
+  margin: 8px;
+  background: rgba(255,255,255,.95);
+  border: none;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+}
+
+.leaflet-control-zoom a {
+  background: transparent;
+  border: none;
+  color: #374151;
+  font-weight: 600;
+  width: 30px;
+  height: 30px;
+  line-height: 30px;
+}
+
+.leaflet-control-zoom a:hover {
+  background: rgba(59,130,246,.1);
+  color: #1e40af;
+}
+
+/* 커스텀 마커 스타일 */
+.custom-marker {
+  cursor: pointer;
+  transition: transform 0.2s ease;
+}
+
+.custom-marker:hover {
+  transform: scale(1.2);
+  z-index: 1000;
+}
+
+/* 기본 Leaflet 마커 스타일 */
+.marker-status-planning {
+  filter: hue-rotate(0deg) saturate(0.3) brightness(0.7);
+}
+
+.marker-status-active {
+  filter: hue-rotate(200deg) saturate(1.2) brightness(1.1);
+}
+
+.marker-status-management {
+  filter: hue-rotate(0deg) saturate(1.8) brightness(1.2);
+}
+
+.marker-status-hold {
+  filter: hue-rotate(60deg) saturate(1.5) brightness(1.1);
+}
+
+.marker-status-completed {
+  filter: hue-rotate(120deg) saturate(1.2) brightness(1.1);
+}
+
+/* Leaflet 지도 z-index 조정 */
+.leaflet-container {
+  z-index: 1;
+  margin: 0;
+  padding: 0;
+  border: none;
+  outline: none;
+}
+
+.leaflet-pane {
+  margin: 0;
+  padding: 0;
+}
+
+.leaflet-control {
+  z-index: 2;
+}
+
+.leaflet-overlay-pane {
+  margin: 0;
+  padding: 0;
+}
+
+.leaflet-tile-pane {
+  margin: 0;
+  padding: 0;
+}
+
+/* 격자무늬 경계선 완전 숨기기 */
+.leaflet-tile {
+  border: 0;
+  outline: 0;
+  box-shadow: none;
+  margin: 0;
+  padding: 0;
+  transform: translate3d(0,0,0);
+}
+
+.leaflet-tile-container {
+  border: 0;
+  outline: 0;
+}
+
+.leaflet-layer {
+  border: 0;
+  outline: 0;
+}
+
+/* 모든 Leaflet 요소의 경계선 제거 */
+.leaflet-container * {
+  border: 0;
+  outline: 0;
+}
+
+.leaflet-tile img {
+  border: 0;
+  outline: 0;
+  box-shadow: none;
+}
+
+/* 지도 컨테이너 내부 요소들 여백 제거 */
+.leaflet-control-container {
+  margin: 0;
+  padding: 0;
+}
+
+/* 팝업 스타일 개선 */
+.leaflet-popup-content-wrapper {
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  background: white;
+  border: 1px solid #e5e7eb;
+}
+
+.leaflet-popup-content {
+  margin: 0;
+  padding: 0;
+}
+
+.leaflet-popup-tip {
+  background: white;
+  border: 1px solid #e5e7eb;
+}
+
+.custom-popup .leaflet-popup-content-wrapper {
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  border: 1px solid #e5e7eb;
+}
+
+.custom-popup .leaflet-popup-content {
+  margin: 0;
+  padding: 0;
+}
+
+.custom-popup .leaflet-popup-tip {
+  background: white;
+  border: 1px solid #e5e7eb;
+}
+
+.custom-popup .leaflet-popup-close-button {
+  color: #6b7280;
+  font-size: 18px;
+  font-weight: bold;
+  padding: 4px 8px;
+}
+
+.custom-popup .leaflet-popup-close-button:hover {
+  color: #374151;
+  background: #f3f4f6;
+  border-radius: 4px;
+}
+
+.custom-popup {
+  padding: 0;
+}
+
+/* 마커 호버 효과 */
+.leaflet-marker-icon:hover {
+  transform: scale(1.1);
+  transition: transform 0.2s ease;
+  z-index: 1000;
+}
+
+/* 월드맵 완벽 최적화 - 여백 완전 제거 */
+.map-container-optimized {
+  height: 100%;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  border: none;
+  outline: none;
+}
+
+/* ===== 간트차트 스타일 ===== */
+.gantt-grid{ 
+  --gantt-left-w: 384px; 
+}
+
+.gantt-header{
+  display: grid;
+  grid-template-columns: var(--gantt-left-w) 1fr;
+  align-items: stretch;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: #f9fafb;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.gantt-body{
+  display: grid;
+  grid-template-columns: var(--gantt-left-w) 1fr;
+  position: relative;
+}
+
+/* 미세 오차 방지 */
+.gantt-left-header, .gantt-right-header,
+.gantt-left-row, .gantt-right-lane{ 
+  box-sizing: border-box; 
+}
+
+.gantt-left-header {
+  padding: 8px;
+  display: flex;
+  align-items: center;
+  min-height: 40px;
+  background-color: #f9fafb;
+}
+
+.gantt-left-header .grid {
+  width: 100%;
+}
+
+.gantt-left-header .grid > div {
+  padding: 4px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.gantt-right-header {
+  padding: 8px;
+  display: grid;
+  grid-auto-rows: auto;
+  row-gap: 4px;
+  min-height: 40px;
+}
+
+.gantt-left-row {
+  padding: 12px;
+  border-bottom: 1px solid #eee;
+  background-color: #f9fafb;
+}
+
+.gantt-right-lane {
+  position: relative;
+  overflow: hidden;
+  height: var(--row-h, 56px);
+  border-bottom: 1px solid #eee;
+  padding: 0;
+}
+
+.gantt-bar {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  left: var(--x);
+  width: var(--w);
+  height: calc(100% - 12px);
+  border-radius: 8px;
+  background: #6b7280;
+  transition: all 0.3s ease;
+  z-index: 5;
+}
+
+.gantt-bar:hover {
+  z-index: 10;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+/* 진행률별 색상 */
+.gantt-bar.progress-100 { background-color: #10b981; }
+.gantt-bar.progress-80 { background-color: #f59e0b; }
+.gantt-bar.progress-50 { background-color: #3b82f6; }
+.gantt-bar.progress-default { background-color: #6b7280; }
+
+/* 오늘 날짜선 */
+.today-line { border-left: 2px dashed #ef4444; }
+
+/* ===== 대시보드 스타일 ===== */
+.tab-navigation {
+  display: flex;
+  background: white;
+  border-radius: 12px;
+  padding: 4px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  margin-bottom: 24px;
+}
+
+.tab-button {
+  flex: 1;
+  padding: 12px 20px;
+  border: none;
+  background: transparent;
+  border-radius: 8px;
+  font-weight: 500;
+  color: #64748b;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  position: relative;
+}
+
+.tab-button.active {
+  background: #3b82f6;
+  color: white;
+  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);
+}
+
+.tab-button:hover:not(.active) {
+  background: #f1f5f9;
+  color: #475569;
+}
+
+.floating-actions {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  z-index: 1000;
+}
+
+.floating-action-btn {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  border: none;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+}
+
+.floating-action-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2);
+}
+
+.floating-action-btn.primary {
+  background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+  color: white;
+}
+
+.floating-action-btn.secondary {
+  background: white;
+  color: #64748b;
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.stat-card {
+  background: white;
+  border-radius: 16px;
+  padding: 24px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  border: 1px solid #e2e8f0;
+  transition: all 0.2s ease;
+}
+
+.stat-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+}
+
+.stat-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.stat-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+}
+
+.stat-value {
+  font-size: 32px;
+  font-weight: 700;
+  color: #1e293b;
+  margin-bottom: 4px;
+}
+
+.stat-label {
+  color: #64748b;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.progress-ring {
+  transform: rotate(-90deg);
+}
+
+.progress-ring-circle {
+  transition: stroke-dasharray 0.35s;
+  transform: rotate(-90deg);
+  transform-origin: 50% 50%;
+}
+
+/* ===== 모달 z-index ===== */
+[data-radix-dialog-content] {
+  z-index: 9999;
+}
+
+[data-radix-popover-content] {
+  z-index: 9998;
+}
+
+/* ===== 반응형 디자인 ===== */
+@media (max-width: 768px) {
+  .tab-navigation {
+    flex-direction: column;
+    gap: 4px;
+  }
+  
+  .stats-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .floating-actions {
+    bottom: 16px;
+    right: 16px;
+  }
+}
+
+/* ===== Tailwind CSS 변수 ===== */
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 222.2 84% 4.9%;
+    --card: 0 0% 100%;
+    --card-foreground: 222.2 84% 4.9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222.2 84% 4.9%;
+    --primary: 222.2 47.4% 11.2%;
+    --primary-foreground: 210 40% 98%;
+    --secondary: 210 40% 96%;
+    --secondary-foreground: 222.2 84% 4.9%;
+    --muted: 210 40% 96%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+    --accent: 210 40% 96%;
+    --accent-foreground: 222.2 84% 4.9%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: 222.2 84% 4.9%;
+    --radius: 0.5rem;
+  }
+
+  .dark {
+    --background: 222.2 84% 4.9%;
+    --foreground: 210 40% 98%;
+    --card: 222.2 84% 4.9%;
+    --card-foreground: 210 40% 98%;
+    --popover: 222.2 84% 4.9%;
+    --popover-foreground: 210 40% 98%;
+    --primary: 210 40% 98%;
+    --primary-foreground: 222.2 47.4% 11.2%;
+    --secondary: 217.2 32.6% 17.5%;
+    --secondary-foreground: 210 40% 98%;
+    --muted: 217.2 32.6% 17.5%;
+    --muted-foreground: 215 20.2% 65.1%;
+    --accent: 217.2 32.6% 17.5%;
+    --accent-foreground: 210 40% 98%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 217.2 32.6% 17.5%;
+    --input: 217.2 32.6% 17.5%;
+    --ring: 212.7 26.8% 83.9%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
