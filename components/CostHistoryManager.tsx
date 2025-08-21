@@ -495,7 +495,7 @@ export default function CostHistoryManager({
             </div>
             <div className="relative">
               <div className="h-80">
-                <Chart type="bar" data={chartData} options={chartOptions} />
+                <Chart type="bar" data={chartData as any} options={chartOptions as any} />
               </div>
             </div>
             <div className="mt-2 text-xs text-gray-600 text-center">
