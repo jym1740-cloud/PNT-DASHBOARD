@@ -14,6 +14,8 @@ interface DashboardHeaderProps {
   onStatusFilterChange: (status: string | undefined) => void;
   onCreate: () => void;
   onHelpOpen: () => void;
+  lastUpdateTime: Date;
+  onManualUpdate: () => void;
 }
 
 export default function DashboardHeader({
@@ -22,22 +24,17 @@ export default function DashboardHeader({
   statusFilter,
   onStatusFilterChange,
   onCreate,
-  onHelpOpen
+  onHelpOpen,
+  lastUpdateTime,
+  onManualUpdate
 }: DashboardHeaderProps) {
-  const [lastUpdate, setLastUpdate] = useState<Date>(new Date());
   const [isUpdating, setIsUpdating] = useState(false);
-
-  // 컴포넌트 마운트 시 현재 시간으로 초기화
-  useEffect(() => {
-    setLastUpdate(new Date());
-  }, []);
 
   // 수동 업데이트 함수
   const handleManualUpdate = () => {
     setIsUpdating(true);
-    // 실제 업데이트 로직이 있다면 여기에 추가
+    onManualUpdate();
     setTimeout(() => {
-      setLastUpdate(new Date());
       setIsUpdating(false);
     }, 500);
   };
@@ -109,7 +106,7 @@ export default function DashboardHeader({
                 <SelectItem value="all">전체</SelectItem>
                 <SelectItem value="계획">계획</SelectItem>
                 <SelectItem value="진행 중">진행 중</SelectItem>
-                <SelectItem value="진행 중(관리필요)">진행 중(관리필요)</SelectItem>
+                <SelectItem value="진행 중(관리필요)">진행 중<br/>(관리필요)</SelectItem>
                 <SelectItem value="일시 중단">일시 중단</SelectItem>
                 <SelectItem value="완료">완료</SelectItem>
               </SelectContent>
@@ -135,10 +132,10 @@ export default function DashboardHeader({
             <Clock className="h-4 w-4" />
             <span className="font-medium">마지막 업데이트:</span>
             <span className="font-mono bg-white px-2 py-1 rounded border">
-              {formatDateTime(lastUpdate)}
+              {formatDateTime(lastUpdateTime)}
             </span>
             <span className="text-gray-500">
-              ({getRelativeTime(lastUpdate)})
+              ({getRelativeTime(lastUpdateTime)})
             </span>
           </div>
           
