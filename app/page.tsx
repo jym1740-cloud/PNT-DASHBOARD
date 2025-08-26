@@ -2,8 +2,6 @@
 import React, { useState, useMemo, useEffect, useCallback } from "react";
 import dynamic from 'next/dynamic';
 
-// CSS는 app/globals.css에서 통합 관리
-
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -93,7 +91,6 @@ export default function CompanyOpsDashboard() {
   function onSchedule(p: any) {
     setSelectedSchedule({ ...p });
     setScheduleItems(p.scheduleItems || []);
-    // 초기 인원 목록 구성: 저장된 people만 사용, 기본 인원 생성 안함
     const initialPeople: Array<{ id: string; name: string; affiliation: string; department: string }> = (p.people && Array.isArray(p.people))
       ? p.people
       : [];
@@ -125,7 +122,7 @@ export default function CompanyOpsDashboard() {
       name: "",
       status: "계획",
       pm: "",
-      salesManagers: [], // 배열로 수정
+      salesManagers: [],
       techManager: "",
       progress: 0,
       startDate: new Date().toISOString().split('T')[0],
@@ -142,8 +139,8 @@ export default function CompanyOpsDashboard() {
       costHistory: []
     };
     setSelected(newProject);
-    setSalesManagersInput(""); // 별도 상태 초기화
-    setEquipmentHistory([]); // equipmentHistory 상태도 초기화
+    setSalesManagersInput("");
+    setEquipmentHistory([]);
     setOpen(true);
     updateLastUpdateTime();
   }
@@ -151,10 +148,6 @@ export default function CompanyOpsDashboard() {
   // 투입률 이력 저장 핸들러
   const onCostHistorySave = useCallback((history: any[]) => {
     if (selectedCostHistory) {
-      console.log('투입률 이력 저장 시작:', history);
-      console.log('현재 선택된 프로젝트:', selectedCostHistory);
-
-      // 가장 최근 이력을 기준으로 프로젝트의 예산과 실제비용 업데이트
       let updatedProject = { ...selectedCostHistory, costHistory: history };
 
       if (history.length > 0) {
@@ -167,7 +160,6 @@ export default function CompanyOpsDashboard() {
           actualCost: latestHistory.actualCost
         };
 
-        // 투입률에 따른 상태 자동 업데이트
         let newStatus = selectedCostHistory.status;
         
         if (latestCostRatio >= 95) {
@@ -183,33 +175,17 @@ export default function CompanyOpsDashboard() {
         }
 
         updatedProject.status = newStatus;
-        
-        console.log('투입률 기반 상태 업데이트:', {
-          costRatio: latestCostRatio,
-          oldStatus: selectedCostHistory.status,
-          newStatus: newStatus
-        });
-        
-        console.log('최신 이력 기반으로 프로젝트 업데이트:', latestHistory);
       }
-
-      console.log('업데이트될 프로젝트:', updatedProject);
 
       setProjects((prev) => {
         const newProjects = prev.map((p) =>
           p.id === selectedCostHistory.id ? updatedProject : p
         );
-        console.log('새로운 프로젝트 배열:', newProjects);
         return newProjects;
       });
 
-      // selectedCostHistory도 업데이트하여 최신 상태 유지
       setSelectedCostHistory(updatedProject);
-
-      console.log('투입률 이력 저장 완료');
       updateLastUpdateTime();
-    } else {
-      console.error('선택된 프로젝트가 없습니다.');
     }
   }, [selectedCostHistory, updateLastUpdateTime]);
 
@@ -221,17 +197,13 @@ export default function CompanyOpsDashboard() {
 
   // 프로젝트 저장 핸들러
   function onSave() {
-    // 투입률 계산 및 상태 자동 변경
     let updatedProject = { ...selected, equipmentHistory };
     
-    // 신규 프로젝트인지 확인
     const isNewProject = !projects.some(p => p.id === selected.id);
     
     if (isNewProject) {
-      // 신규 프로젝트: 배열 맨 앞에 추가
       setProjects(prev => [updatedProject, ...prev]);
     } else {
-      // 기존 프로젝트: 업데이트
       setProjects(prev => prev.map(p => p.id === selected.id ? updatedProject : p));
     }
     
@@ -354,7 +326,6 @@ export default function CompanyOpsDashboard() {
         {/* 월드맵 */}
         <WorldMap projects={filteredProjects} />
 
-        {/* 상태별 현황 - 수직 배열 최적화 */}
         {/* 상태별 현황 */}
         <StatusOverview projects={projects} />
 
@@ -420,7 +391,7 @@ export default function CompanyOpsDashboard() {
 
             {/* 담당자 정보 섹션 */}
             <div className="border-t pt-4 space-y-4">
-              <div className="text-sm font-medium text-medium text-zinc-700 flex items-center gap-2">
+              <div className="text-sm font-medium text-zinc-700 flex items-center gap-2">
                 <div className="w-2 h-2 bg-green-500 rounded-full"></div>
                 담당자 정보
               </div>
@@ -436,13 +407,8 @@ export default function CompanyOpsDashboard() {
                     value={salesManagersInput}
                     onChange={(e) => {
                       const inputValue = e.target.value;
-                      console.log('영업 담당자 입력:', inputValue);
                       setSalesManagersInput(inputValue);
-                      
-                      // 쉼표로 구분하여 배열로 변환
                       const managers = inputValue.split(',').map(m => m.trim()).filter(Boolean);
-                      console.log('변환된 배열:', managers);
-                      
                       setSelected((s: any) => ({ ...s, salesManagers: managers }));
                     }} 
                     placeholder="담당자1, 담당자2" 
@@ -486,8 +452,7 @@ export default function CompanyOpsDashboard() {
             {/* 비용 정보 섹션 */}
             <div className="border-t pt-4 space-y-4">
               <div className="text-sm font-medium text-zinc-700 flex items-center gap-2">
-                <div className="w-2 h-2 bg-amber-500 rounded-full">
-                </div>
+                <div className="w-2 h-2 bg-amber-500 rounded-full"></div>
                 비용 정보
               </div>
               <div className="grid grid-cols-2 gap-3">
@@ -549,7 +514,6 @@ export default function CompanyOpsDashboard() {
           </DialogHeader>
           
           <div className="space-y-4">
-            {/* 이력 추가 버튼 */}
             <div className="flex justify-between items-center">
               <div className="text-sm text-gray-600">
                 총 <span className="font-semibold text-purple-600">{equipmentHistory.length}</span>건의 이력이 있습니다.
@@ -571,7 +535,6 @@ export default function CompanyOpsDashboard() {
               </Button>
             </div>
 
-            {/* 설비이력 테이블 */}
             <EquipmentHistoryTable
               equipmentHistory={equipmentHistory}
               onUpdate={(id: string, field: string, value: any) => {
@@ -583,7 +546,6 @@ export default function CompanyOpsDashboard() {
               }}
               onDelete={(id: string) => {
                 setEquipmentHistory(prev => prev.filter(item => item.id !== id));
-                updateLastUpdateTime();
               }}
             />
           </div>
@@ -599,7 +561,6 @@ export default function CompanyOpsDashboard() {
       {/* 일정 및 인원투입 관리 모달 */}
       <Dialog open={scheduleOpen} onOpenChange={(open) => {
         if (!open && scheduleItems.length > 0) {
-          // 모달을 닫으려고 할 때 저장 확인
           const shouldSave = confirm('저장하지 않은 변경사항이 있습니다. 저장하시겠습니까?');
           if (shouldSave) {
             saveSchedule();
@@ -616,7 +577,6 @@ export default function CompanyOpsDashboard() {
           </DialogHeader>
           
           <div className="space-y-6">
-            {/* 프로젝트 기본 정보 */}
             <div className="bg-gray-50 rounded-lg p-4">
               <div className="grid grid-cols-2 gap-4 text-sm">
                 <div>
@@ -632,7 +592,6 @@ export default function CompanyOpsDashboard() {
               </div>
             </div>
 
-            {/* GanttChart 컴포넌트 사용 */}
             <GanttChart
               projects={[selectedSchedule].filter(Boolean)}
               scheduleItems={scheduleItems}
@@ -667,36 +626,16 @@ export default function CompanyOpsDashboard() {
       {costHistoryOpen && selectedCostHistory && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           {(() => {
-            // 디버깅을 위한 값 계산
             let calculatedBudget = 0;
             let calculatedActualCost = 0;
             
             if (selectedCostHistory.costHistory && selectedCostHistory.costHistory.length > 0) {
-              // 테이블 표시 순서와 일치하도록 첫 번째 항목을 최신 이력으로 사용
               const latestHistory = selectedCostHistory.costHistory[0];
-              
               calculatedBudget = latestHistory.budget;
               calculatedActualCost = latestHistory.actualCost;
-              
-              console.log('투입률 이력 모달 열기 - 최신 이력 데이터 (테이블 표시 순서 기준):', {
-                projectName: selectedCostHistory.name,
-                costHistoryLength: selectedCostHistory.costHistory.length,
-                latestHistory: latestHistory,
-                arrayIndex: 0,
-                calculatedBudget: calculatedBudget,
-                calculatedActualCost: calculatedActualCost
-              });
             } else {
               calculatedBudget = selectedCostHistory.budget || 0;
               calculatedActualCost = selectedCostHistory.actualCost || 0;
-              
-              console.log('투입률 이력 모달 열기 - 이력 없음, 프로젝트 기본값 사용:', {
-                projectName: selectedCostHistory.name,
-                projectBudget: selectedCostHistory.budget,
-                projectActualCost: selectedCostHistory.actualCost,
-                calculatedBudget: calculatedBudget,
-                calculatedActualCost: calculatedActualCost
-              });
             }
             
             return (
@@ -710,7 +649,6 @@ export default function CompanyOpsDashboard() {
                 onClose={() => {
                   setCostHistoryOpen(false);
                   setSelectedCostHistory(null);
-                  console.log('투입률 이력 모달 닫힘');
                 }}
               />
             );
