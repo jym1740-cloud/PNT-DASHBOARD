@@ -1,83 +1,29 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import dynamic from 'next/dynamic';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Badge } from '@/components/ui/badge';
-import { Plus, Edit3, Trash2, TrendingUp, TrendingDown, BarChart3 } from 'lucide-react';
-import { CostHistory } from '@/lib/types';
-import { formatNumberWithCommas, parseNumberFromString } from '@/lib/utils';
-import {
-  Chart as ChartJS,
-  CategoryScale,
-  LinearScale,
-  BarElement,
-  LineElement,
-  PointElement,
-  Title,
-  Tooltip,
-  Legend,
-  ChartOptions
-} from 'chart.js';
-import { Chart } from 'react-chartjs-2';
-import ChartDataLabels from 'chartjs-plugin-datalabels';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { AlertCircle, Plus, Edit, Trash2, Save, X, TrendingUp, DollarSign, Calendar } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { CostHistory, Project } from '@/lib/types';
+import { safeMax, safeMin, safeNumber, validateChartData, validateChartOptions } from '@/lib/utils';
+import ChartErrorBoundary from './ChartErrorBoundary';
 
-// Chart.js 등록
-ChartJS.register(
-  CategoryScale,
-  LinearScale,
-  BarElement,
-  LineElement,
-  PointElement,
-  Title,
-  Tooltip,
-  Legend,
-  ChartDataLabels
-);
-
-// 커스텀 플러그인: 기준선 위에 퍼센트 표시
-const customLineLabelsPlugin = {
-  id: 'customLineLabels',
-  afterDraw: function(chart: any) {
-    const ctx = chart.ctx;
-    const datasets = chart.data.datasets;
-    
-    datasets.forEach((dataset: any, datasetIndex: number) => {
-      if (dataset.type === 'line' && dataset.label.includes('기준선')) {
-        const meta = chart.getDatasetMeta(datasetIndex);
-        const data = dataset.data;
-        
-        // 더미 끝점에 퍼센트 표시
-        const dummyEndIndex = data.length - 1; // 더미 끝점
-        if (meta.data[dummyEndIndex]) {
-          const point = meta.data[dummyEndIndex];
-          const x = point.x;
-          const y = point.y;
-          
-          // 퍼센트 계산
-          const percentage = dataset.label.includes('100%') ? '100%' : '70%';
-          const color = dataset.label.includes('100%') ? '#DC2626' : '#D97706';
-          
-          // 텍스트 스타일 설정
-          ctx.font = 'bold 12px Arial';
-          ctx.fillStyle = color;
-          ctx.textAlign = 'left';
-          ctx.textBaseline = 'bottom';
-          
-          // 퍼센트 표시
-          ctx.fillText(percentage, x + 5, y - 5);
-        }
-      }
-    });
-  }
-};
-
-ChartJS.register(customLineLabelsPlugin);
+// Chart.js 컴포넌트를 동적으로 import하여 SSR 비활성화
+const Chart = dynamic(() => import('react-chartjs-2').then(mod => ({ default: mod.Line })), {
+  ssr: false,
+  loading: () => (
+    <div className="h-80 flex items-center justify-center bg-gray-100 rounded-lg">
+      <div className="text-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+        <p className="text-gray-600">차트를 불러오는 중...</p>
+      </div>
+    </div>
+  )
+});
 
 interface CostHistoryManagerProps {
   projectId: string;
@@ -98,653 +44,491 @@ export default function CostHistoryManager({
   onSave,
   onClose
 }: CostHistoryManagerProps) {
-  const [histories, setHistories] = useState<CostHistory[]>(costHistory || []);
-  const [isAdding, setIsAdding] = useState(false);
+  const [history, setHistory] = useState<CostHistory[]>(costHistory);
   const [editingId, setEditingId] = useState<string | null>(null);
-  
-  // 현재 예산, 실제비용, 투입률 상태 (이력 기반으로 자동 업데이트)
-  const [currentValues, setCurrentValues] = useState({
-    budget: 0,
-    actualCost: 0,
-    costRatio: 0
-  });
-  
-  // 새 이력 입력 폼 상태
-  const [newHistory, setNewHistory] = useState({
-    actualCost: 0,
-    budget: 0,
-    note: '',
-    manager: '',
-    changeReason: ''
-  });
+  const [editingItem, setEditingItem] = useState<Partial<CostHistory>>({});
+  const [chartError, setChartError] = useState<string | null>(null);
+  const [isChartReady, setIsChartReady] = useState(false);
 
-  // 편집 중인 이력 상태
-  const [editingHistory, setEditingHistory] = useState<CostHistory | null>(null);
+  // Chart.js 초기화 함수
+  const initializeChartJS = useCallback(async () => {
+    try {
+      if (typeof window === 'undefined') return;
 
-  // 현재 값들을 업데이트하는 함수 (중앙화된 로직)
-  const updateCurrentValues = useCallback((historiesArray: CostHistory[]) => {
-    console.log('updateCurrentValues 호출됨:', historiesArray);
-    
-         if (historiesArray.length > 0) {
-       // 테이블 표시 순서와 일치하도록 마지막 항목을 최신 이력으로 사용
-       // (테이블에서 과거순으로 정렬하므로 마지막이 최신)
-       const latestHistory = historiesArray[historiesArray.length - 1];
+      const ChartJS = await import('chart.js/auto');
+      const DataLabelsPlugin = await import('chartjs-plugin-datalabels');
       
-      const newCostRatio = calculateCostRatio(latestHistory.actualCost, latestHistory.budget);
-      
-             console.log('최신 이력 기반으로 현재값 업데이트 (테이블 표시 순서 기준):', {
-         arrayIndex: historiesArray.length - 1,
-         budget: latestHistory.budget,
-         actualCost: latestHistory.actualCost,
-         costRatio: newCostRatio
-       });
-      
-      setCurrentValues({
-        budget: latestHistory.budget,
-        actualCost: latestHistory.actualCost,
-        costRatio: newCostRatio
-      });
-      
-      // 새 이력 입력 폼의 기본값도 업데이트
-      setNewHistory(prev => ({
-        ...prev,
-        actualCost: latestHistory.actualCost,
-        budget: latestHistory.budget
-      }));
-    } else {
-      // 이력이 없으면 props로 받은 값 사용
-      const fallbackCostRatio = calculateCostRatio(currentActualCost || 0, currentBudget || 0);
-      
-      console.log('이력 없음, props 값 사용:', {
-        budget: currentBudget || 0,
-        actualCost: currentActualCost || 0,
-        costRatio: fallbackCostRatio
-      });
-      
-      setCurrentValues({
-        budget: currentBudget || 0,
-        actualCost: currentActualCost || 0,
-        costRatio: fallbackCostRatio
-      });
-      
-      setNewHistory(prev => ({
-        ...prev,
-        actualCost: currentActualCost || 0,
-        budget: currentBudget || 0
-      }));
+      // 플러그인 안전 등록
+      if (ChartJS.default && DataLabelsPlugin.default) {
+        ChartJS.default.register(DataLabelsPlugin.default);
+        console.log('Chart.js 및 플러그인이 성공적으로 등록되었습니다.');
+        setIsChartReady(true);
+      }
+    } catch (error) {
+      console.error('Chart.js 초기화 실패:', error);
+      setChartError('차트 라이브러리 초기화에 실패했습니다.');
     }
-  }, [currentBudget, currentActualCost]);
+  }, []);
 
-  // 초기 로딩 시 현재 값들을 설정
+  // 컴포넌트 마운트 시 Chart.js 초기화
   useEffect(() => {
-    updateCurrentValues(costHistory || []);
-  }, [costHistory, updateCurrentValues]);
+    initializeChartJS();
+  }, [initializeChartJS]);
 
-  // 이력이 변경될 때마다 현재 값들을 자동 업데이트
-  useEffect(() => {
-    updateCurrentValues(histories);
-  }, [histories, updateCurrentValues]);
+  // 현재 값 업데이트 함수
+  const updateCurrentValues = useCallback((historyArray: CostHistory[]) => {
+    try {
+      if (!Array.isArray(historyArray) || historyArray.length === 0) {
+        console.log('updateCurrentValues: 빈 이력 배열');
+        return;
+      }
 
-  // 실시간 동기화를 위한 useEffect (무한 루프 방지)
-  useEffect(() => {
-    // 초기 로딩 시에는 저장하지 않음
-    if (histories !== costHistory && histories.length > 0) {
-      const timeoutId = setTimeout(() => {
-        console.log('CostHistoryManager: 이력 변경 감지, 저장 실행:', histories);
-        onSave(histories);
-      }, 500); // 500ms 디바운스
+      console.log('updateCurrentValues 호출됨:', historyArray);
       
-      return () => clearTimeout(timeoutId);
+      // 테이블 표시 순서와 일치하도록 첫 번째 항목을 최신 이력으로 사용
+      const latestHistory = historyArray[0];
+      
+      console.log('최신 이력 기반으로 현재값 업데이트 (테이블 표시 순서 기준):', latestHistory);
+      
+      // 안전한 값 변환
+      const budget = safeNumber(latestHistory.budget, 0);
+      const actualCost = safeNumber(latestHistory.actualCost, 0);
+      
+      // 투입률 계산
+      const costRatio = budget > 0 ? (actualCost / budget) * 100 : 0;
+      
+      console.log('계산된 값들:', { budget, actualCost, costRatio });
+      
+    } catch (error) {
+      console.error('updateCurrentValues 실행 중 오류:', error);
     }
-  }, [histories, onSave, costHistory]);
+  }, []);
 
-  // 투입률 계산
-  const calculateCostRatio = (actual: number, budget: number): number => {
-    return budget > 0 ? Math.round((actual / budget) * 100 * 100) / 100 : 0;
-  };
-
-  // 투입률 색상 클래스
-  const getCostRatioColor = (ratio: number): string => {
-    if (ratio > 100) return "bg-red-100 text-red-700";
-    if (ratio >= 80) return "bg-red-100 text-red-700";
-    if (ratio >= 70) return "bg-amber-100 text-amber-700";
-    return "bg-green-100 text-green-700";
-  };
+  // 투입률 계산 함수
+  const calculateCostRatio = useCallback((budget: number, actualCost: number): number => {
+    try {
+      if (budget <= 0) return 0;
+      return (actualCost / budget) * 100;
+    } catch (error) {
+      console.error('투입률 계산 중 오류:', error);
+      return 0;
+    }
+  }, []);
 
   // 차트 데이터 생성
-  const chartData = {
-    labels: [
-      '시작', // 더미 시작점
-      ...histories.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()).map(h => h.date),
-      '현재' // 더미 끝점
-    ],
-    datasets: [
-      {
-        type: 'bar' as const,
-        label: '실제 비용',
-        data: [
-          0, // 더미 시작점 (표시 안됨)
-          ...histories.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()).map(h => h.actualCost),
-          0 // 더미 끝점 (표시 안됨)
-        ],
-        backgroundColor: 'rgba(59, 130, 246, 0.7)',
-        borderColor: 'rgba(59, 130, 246, 1)',
-        borderWidth: 1,
-        borderRadius: 4,
-        order: 3
-      },
-      {
-        type: 'line' as const,
-        label: '100% 기준선',
-        data: [
-          Math.max(...histories.map(h => h.budget)), // 더미 시작점
-          ...histories.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()).map(h => h.budget),
-          Math.max(...histories.map(h => h.budget)) // 더미 끝점
-        ],
-        borderColor: 'rgba(239, 68, 68, 0.8)',
-        borderWidth: 3,
-        borderDash: [8, 4],
-        fill: false,
-        pointRadius: 0,
-        pointHoverRadius: 6,
-        pointHoverBackgroundColor: 'rgba(239, 68, 68, 1)',
-        pointHoverBorderColor: 'white',
-        pointHoverBorderWidth: 2,
-        order: 1,
-        tension: 0,
-        spanGaps: true
-      },
-      {
-        type: 'line' as const,
-        label: '70% 기준선',
-        data: [
-          Math.max(...histories.map(h => h.budget)) * 0.7, // 더미 시작점
-          ...histories.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()).map(h => h.budget * 0.7),
-          Math.max(...histories.map(h => h.budget)) * 0.7 // 더미 끝점
-        ],
-        borderColor: 'rgba(245, 158, 11, 0.8)',
-        borderWidth: 2,
-        borderDash: [4, 4],
-        fill: false,
-        pointRadius: 0,
-        pointHoverRadius: 6,
-        pointHoverBackgroundColor: 'rgba(245, 158, 11, 1)',
-        pointHoverBorderColor: 'white',
-        pointHoverBorderWidth: 2,
-        order: 2,
-        tension: 0,
-        spanGaps: true
+  const chartData = useMemo(() => {
+    try {
+      if (!Array.isArray(history) || history.length === 0) {
+        return {
+          labels: [],
+          datasets: []
+        };
       }
-    ]
-  };
 
-  // 차트 옵션
-  const chartOptions: ChartOptions<'bar' | 'line'> = {
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: {
-      legend: {
-        display: false // 레전드 숨김
-      },
-      title: {
-        display: false
-      },
-      tooltip: {
-        backgroundColor: 'rgba(0, 0, 0, 0.8)',
-        titleColor: 'white',
-        bodyColor: 'white',
-        borderColor: 'rgba(255, 255, 255, 0.2)',
-        borderWidth: 1,
-        cornerRadius: 8,
-        displayColors: true,
-        callbacks: {
-          label: function(context) {
-            const label = context.dataset.label || '';
-            const value = context.parsed.y;
-            return `${label}: ${value.toLocaleString()}원`;
-          }
-        }
-      },
-      // 막대 그래프 내부에 금액 표시
-      datalabels: {
-        display: function(context: any) {
-          // 더미 데이터 포인트는 표시하지 않음
-          if (context.dataIndex === 0 || context.dataIndex === histories.length + 1) {
-            return false;
-          }
-          return context.dataset.type === 'bar';
-        },
-        color: 'white',
-        anchor: 'center',
-        align: 'center',
-        font: {
-          size: 11,
-          weight: 'bold'
-        },
-        formatter: function(value: number) {
-          return value.toLocaleString();
-        }
-      } as any,
-      // 커스텀 플러그인은 ChartJS.register로 등록되어 자동 활성화됨
-    },
-    scales: {
-      x: {
-        grid: {
-          display: false
-        },
-        ticks: {
-          font: {
-            size: 11
+      // 날짜순으로 정렬 (최신이 뒤로)
+      const sortedHistory = [...history].sort((a, b) => 
+        new Date(a.date).getTime() - new Date(b.date).getTime()
+      );
+
+      const data = {
+        labels: sortedHistory.map(h => h.date),
+        datasets: [
+          {
+            label: '예산',
+            data: sortedHistory.map(h => h.budget),
+            borderColor: 'rgb(59, 130, 246)',
+            backgroundColor: 'rgba(59, 130, 246, 0.1)',
+            tension: 0.1,
+            fill: false
           },
-          color: '#6B7280',
-          callback: function(value: any, index: number) {
-            // 더미 데이터 포인트는 라벨 숨김
-            if (index === 0 || index === histories.length + 1) {
-              return '';
+          {
+            label: '실제 비용',
+            data: sortedHistory.map(h => h.actualCost),
+            borderColor: 'rgb(239, 68, 68)',
+            backgroundColor: 'rgba(239, 68, 68, 0.1)',
+            tension: 0.1,
+            fill: false
+          }
+        ]
+      };
+
+      // 데이터 유효성 검사
+      if (!validateChartData(data)) {
+        console.warn('차트 데이터 유효성 검사 실패');
+        return { labels: [], datasets: [] };
+      }
+
+      return data;
+    } catch (error) {
+      console.error('차트 데이터 생성 중 오류:', error);
+      return { labels: [], datasets: [] };
+    }
+  }, [history]);
+
+  // 차트 옵션 생성
+  const chartOptions = useMemo(() => {
+    try {
+      const options = {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          datalabels: {
+            display: true,
+            color: '#374151',
+            font: {
+              weight: 'bold'
+            },
+            formatter: (value: number) => {
+              return value.toLocaleString();
             }
-            return this.getLabelForValue(value);
+          },
+          legend: {
+            display: true,
+            position: 'top' as const
+          }
+        },
+        scales: {
+          y: {
+            beginAtZero: true,
+            ticks: {
+              callback: (value: number) => {
+                return value.toLocaleString();
+              }
+            }
           }
         }
-      },
-      y: {
-        display: false, // y축 숨김
-        beginAtZero: true,
-        // 예산 선 위에 여유 공간 확보 (최대값의 20% 여유)
-        suggestedMax: (() => {
-          const maxValue = Math.max(...histories.map(h => Math.max(h.actualCost, h.budget)));
-          return maxValue * 1.2;
-        })()
+      };
+
+      // 옵션 유효성 검사
+      if (!validateChartOptions(options)) {
+        console.warn('차트 옵션 유효성 검사 실패');
+        return {};
       }
-    },
-    elements: {
-      bar: {
-        borderRadius: 4
+
+      return options;
+    } catch (error) {
+      console.error('차트 옵션 생성 중 오류:', error);
+      return {};
+    }
+  }, []);
+
+  // 안전한 최대 예산 계산
+  const getSafeMaxBudget = useCallback(() => {
+    try {
+      if (!Array.isArray(history) || history.length === 0) {
+        return Math.max(currentBudget, currentActualCost, 1000000);
       }
-    },
-    interaction: {
-      intersect: false,
-      mode: 'index' as const
-    }
-  };
-
-  // 새 이력 추가
-  const handleAddHistory = () => {
-    if (!newHistory.manager.trim()) {
-      alert('담당자를 입력해주세요.');
-      return;
-    }
-
-    const history: CostHistory = {
-      id: Date.now().toString(),
-      date: new Date().toISOString().split('T')[0],
-      actualCost: newHistory.actualCost,
-      budget: newHistory.budget,
-      costRatio: calculateCostRatio(newHistory.actualCost, newHistory.budget),
-      note: newHistory.note,
-      manager: newHistory.manager,
-      changeReason: newHistory.changeReason
-    };
-
-    const newHistories = [...histories, history];
-    setHistories(newHistories);
-    
-    // 폼 초기화
-    setNewHistory({
-      actualCost: newHistory.actualCost, // 새로 추가된 값 유지
-      budget: newHistory.budget, // 새로 추가된 값 유지
-      note: '',
-      manager: '',
-      changeReason: ''
-    });
-    setIsAdding(false);
-  };
-
-  // 이력 편집 시작
-  const handleEditStart = (history: CostHistory) => {
-    setEditingId(history.id);
-    setEditingHistory({ ...history });
-  };
-
-  // 이력 편집 저장
-  const handleEditSave = () => {
-    if (!editingHistory) return;
-
-    const newHistories = histories.map(h => 
-      h.id === editingHistory.id ? editingHistory : h
-    );
-    setHistories(newHistories);
-    setEditingId(null);
-    setEditingHistory(null);
-    
-    console.log('이력 편집 완료:', editingHistory);
-    console.log('새로운 이력 배열:', newHistories);
-  };
-
-  // 이력 편집 취소
-  const handleEditCancel = () => {
-    setEditingId(null);
-    setEditingHistory(null);
-  };
-
-  // 이력 삭제
-  const handleDelete = (id: string) => {
-    if (confirm('정말 삭제하시겠습니까?')) {
-      const newHistories = histories.filter(h => h.id !== id);
-      setHistories(newHistories);
       
-      console.log('이력 삭제 완료, ID:', id);
-      console.log('새로운 이력 배열:', newHistories);
+      const budgets = history.map(h => h.budget).filter(b => b > 0);
+      const actualCosts = history.map(h => h.actualCost).filter(c => c > 0);
+      
+      const maxBudget = safeMax(budgets);
+      const maxActualCost = safeMax(actualCosts);
+      const currentMax = Math.max(currentBudget, currentActualCost);
+      
+      return Math.max(maxBudget, maxActualCost, currentMax, 1000000);
+    } catch (error) {
+      console.error('최대 예산 계산 중 오류:', error);
+      return Math.max(currentBudget, currentActualCost, 1000000);
     }
-  };
+  }, [history, currentBudget, currentActualCost]);
 
-  // 변경 사유 옵션
-  const changeReasons = [
-    '예산 증가',
-    '예산 감소',
-    '실제 비용 증가',
-    '실제 비용 감소',
-    '예산 조정',
-    '비용 정산',
-    '기타'
-  ];
+  // 이력 추가 핸들러
+  const handleAddHistory = useCallback(() => {
+    try {
+      const newHistory: CostHistory = {
+        id: `history_${Date.now()}`,
+        date: new Date().toISOString().split('T')[0],
+        budget: currentBudget,
+        actualCost: currentActualCost,
+        description: ''
+      };
+      
+      setHistory(prev => [newHistory, ...prev]);
+      updateCurrentValues([newHistory, ...history]);
+    } catch (error) {
+      console.error('이력 추가 중 오류:', error);
+    }
+  }, [currentBudget, currentActualCost, history, updateCurrentValues]);
 
-  // 저장 및 닫기
-  const handleSaveAndClose = () => {
-    // 이미 useEffect에서 저장되므로 닫기만 처리
-    onClose();
-  };
+  // 편집 시작 핸들러
+  const handleEditStart = useCallback((item: CostHistory) => {
+    try {
+      setEditingId(item.id);
+      setEditingItem({ ...item });
+    } catch (error) {
+      console.error('편집 시작 중 오류:', error);
+    }
+  }, []);
+
+  // 편집 저장 핸들러
+  const handleEditSave = useCallback(() => {
+    try {
+      if (!editingId || !editingItem.date || editingItem.budget === undefined || editingItem.actualCost === undefined) {
+        return;
+      }
+
+      setHistory(prev => 
+        prev.map(item => 
+          item.id === editingId 
+            ? { ...item, ...editingItem }
+            : item
+        )
+      );
+
+      setEditingId(null);
+      setEditingItem({});
+    } catch (error) {
+      console.error('편집 저장 중 오류:', error);
+    }
+  }, [editingId, editingItem]);
+
+  // 삭제 핸들러
+  const handleDelete = useCallback((id: string) => {
+    try {
+      setHistory(prev => prev.filter(item => item.id !== id));
+    } catch (error) {
+      console.error('삭제 중 오류:', error);
+    }
+  }, []);
+
+  // 저장 및 닫기 핸들러
+  const handleSaveAndClose = useCallback(() => {
+    try {
+      onSave(history);
+      onClose();
+    } catch (error) {
+      console.error('저장 및 닫기 중 오류:', error);
+    }
+  }, [history, onSave, onClose]);
+
+  // 차트 에러 처리
+  const handleChartError = useCallback((error: Error) => {
+    console.error('Chart.js 렌더링 오류:', error);
+    setChartError('차트를 표시할 수 없습니다.');
+  }, []);
+
+  if (chartError) {
+    return (
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        <div className="bg-white rounded-lg p-6 max-w-md w-full">
+          <div className="text-center">
+            <AlertCircle className="h-16 w-16 text-red-400 mx-auto mb-4" />
+            <h3 className="text-lg font-semibold text-red-800 mb-2">차트 오류</h3>
+            <p className="text-red-600 text-sm mb-4">{chartError}</p>
+            <Button onClick={onClose} variant="outline">닫기</Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <Card className="w-full max-w-6xl mx-auto">
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <TrendingUp className="h-5 w-5 text-blue-600" />
-          투입률 이력관리 - {projectName}
-        </CardTitle>
-      </CardHeader>
-      
-      <CardContent className="space-y-6">
-        {/* 현재 투입률 요약 */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4 bg-gray-50 rounded-lg">
-          <div className="text-center">
-            <div className="text-sm text-gray-600">현재 예산</div>
-            <div className="text-xl font-bold text-blue-600">
-              {currentValues.budget.toLocaleString()}원
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-lg max-w-6xl w-full max-h-[90vh] overflow-y-auto">
+        <div className="p-6">
+          <div className="flex justify-between items-center mb-6">
+            <div>
+              <h2 className="text-2xl font-bold text-gray-900">투입률 이력 관리</h2>
+              <p className="text-gray-600">{projectName}</p>
             </div>
+            <Button onClick={onClose} variant="ghost" size="sm">
+              <X className="h-5 w-5" />
+            </Button>
           </div>
-          <div className="text-center">
-            <div className="text-sm text-gray-600">현재 실제비용</div>
-            <div className="text-xl font-bold text-green-600">
-              {currentValues.actualCost.toLocaleString()}원
-            </div>
-          </div>
-          <div className="text-center">
-            <div className="text-sm text-gray-600">현재 투입률</div>
-            <div className={`text-xl font-bold ${getCostRatioColor(currentValues.costRatio)}`}>
-              {currentValues.costRatio}%
-            </div>
-          </div>
-        </div>
 
-        {/* 투입률 이력 차트 */}
-        {histories.length > 0 && (
-          <Card className="p-4 border-2 border-blue-100">
-            <div className="flex items-center gap-2 mb-4">
-              <BarChart3 className="h-5 w-5 text-blue-600" />
-              <h3 className="text-lg font-semibold">투입률 이력 추이</h3>
-            </div>
-            <div className="relative">
+          {/* 현재 상태 요약 */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium text-gray-500">현재 예산</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold text-blue-600">
+                  {currentBudget.toLocaleString()}원
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium text-gray-500">현재 실제 비용</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold text-red-600">
+                  {currentActualCost.toLocaleString()}원
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium text-gray-500">투입률</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold text-green-600">
+                  {calculateCostRatio(currentBudget, currentActualCost).toFixed(1)}%
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* 차트 */}
+          <Card className="mb-6">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <TrendingUp className="h-5 w-5 text-blue-600" />
+                투입률 추이
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
               <div className="h-80">
-                <Chart type="bar" data={chartData as any} options={chartOptions as any} />
+                <ChartErrorBoundary onError={handleChartError}>
+                  {isChartReady && Chart && (
+                    <Chart data={chartData} options={chartOptions} />
+                  )}
+                </ChartErrorBoundary>
               </div>
-            </div>
-            <div className="mt-2 text-xs text-gray-600 text-center">
-              💡 왼쪽(과거) → 오른쪽(최신) | 파란색 막대: 실제 비용 (내부에 금액 표시), 빨간색 점선: 100% 기준선, 주황색 점선: 70% 기준선
-            </div>
+            </CardContent>
           </Card>
-        )}
 
-        {/* 새 이력 추가 폼 */}
-        {!isAdding ? (
-          <Button onClick={() => setIsAdding(true)} className="w-full">
-            <Plus className="h-4 w-4 mr-2" />
-            새 투입률 이력 추가
-          </Button>
-        ) : (
-          <Card className="p-4 border-2 border-blue-200">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="actualCost">실제 비용</Label>
-                <Input
-                  id="actualCost"
-                  type="text"
-                  value={formatNumberWithCommas(newHistory.actualCost)}
-                  onChange={(e) => {
-                    const rawValue = e.target.value;
-                    const numericValue = parseNumberFromString(rawValue);
-                    if (!isNaN(numericValue)) {
-                      setNewHistory({
-                        ...newHistory,
-                        actualCost: numericValue
-                      });
-                    }
-                  }}
-                  placeholder="실제 비용을 입력하세요 (예: 1,000,000)"
-                />
+          {/* 이력 관리 */}
+          <Card>
+            <CardHeader>
+              <div className="flex justify-between items-center">
+                <CardTitle className="flex items-center gap-2">
+                  <Calendar className="h-5 w-5 text-green-600" />
+                  투입률 이력
+                </CardTitle>
+                <Button onClick={handleAddHistory} className="bg-green-600 hover:bg-green-700">
+                  <Plus className="h-4 w-4 mr-2" />
+                  이력 추가
+                </Button>
               </div>
-              <div>
-                <Label htmlFor="budget">예산</Label>
-                <Input
-                  id="budget"
-                  type="text"
-                  value={formatNumberWithCommas(newHistory.budget)}
-                  onChange={(e) => {
-                    const rawValue = e.target.value;
-                    const numericValue = parseNumberFromString(rawValue);
-                    if (!isNaN(numericValue)) {
-                      setNewHistory({
-                        ...newHistory,
-                        budget: numericValue
-                      });
-                    }
-                  }}
-                  placeholder="예산을 입력하세요 (예: 1,000,000)"
-                />
-              </div>
-              <div>
-                <Label htmlFor="manager">담당자</Label>
-                <Input
-                  id="manager"
-                  value={newHistory.manager}
-                  onChange={(e) => setNewHistory({
-                    ...newHistory,
-                    manager: e.target.value
-                  })}
-                  placeholder="담당자명을 입력하세요"
-                />
-              </div>
-              <div>
-                <Label htmlFor="changeReason">변경 사유</Label>
-                <Select
-                  value={newHistory.changeReason}
-                  onValueChange={(value) => setNewHistory({
-                    ...newHistory,
-                    changeReason: value
-                  })}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="변경 사유를 선택하세요" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {changeReasons.map((reason) => (
-                      <SelectItem key={reason} value={reason}>
-                        {reason}
-                      </SelectItem>
+            </CardHeader>
+            <CardContent>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b">
+                      <th className="text-left p-2">날짜</th>
+                      <th className="text-left p-2">예산</th>
+                      <th className="text-left p-2">실제 비용</th>
+                      <th className="text-left p-2">투입률</th>
+                      <th className="text-left p-2">비고</th>
+                      <th className="text-left p-2">작업</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {history.map((item) => (
+                      <tr key={item.id} className="border-b hover:bg-gray-50">
+                        {editingId === item.id ? (
+                          <>
+                            <td className="p-2">
+                              <Input
+                                type="date"
+                                value={editingItem.date || ''}
+                                onChange={(e) => setEditingItem(prev => ({ ...prev, date: e.target.value }))}
+                              />
+                            </td>
+                            <td className="p-2">
+                              <Input
+                                type="number"
+                                value={editingItem.budget || ''}
+                                onChange={(e) => setEditingItem(prev => ({ ...prev, budget: Number(e.target.value) }))}
+                              />
+                            </td>
+                            <td className="p-2">
+                              <Input
+                                type="number"
+                                value={editingItem.actualCost || ''}
+                                onChange={(e) => setEditingItem(prev => ({ ...prev, actualCost: Number(e.target.value) }))}
+                              />
+                            </td>
+                            <td className="p-2">
+                              {editingItem.budget && editingItem.actualCost
+                                ? `${calculateCostRatio(editingItem.budget, editingItem.actualCost).toFixed(1)}%`
+                                : '-'
+                              }
+                            </td>
+                            <td className="p-2">
+                              <Input
+                                value={editingItem.description || ''}
+                                onChange={(e) => setEditingItem(prev => ({ ...prev, description: e.target.value }))}
+                                placeholder="비고"
+                              />
+                            </td>
+                            <td className="p-2">
+                              <div className="flex gap-1">
+                                <Button onClick={handleEditSave} size="sm" className="bg-green-600 hover:bg-green-700">
+                                  <Save className="h-3 w-3" />
+                                </Button>
+                                <Button 
+                                  onClick={() => {
+                                    setEditingId(null);
+                                    setEditingItem({});
+                                  }} 
+                                  size="sm" 
+                                  variant="outline"
+                                >
+                                  <X className="h-3 w-3" />
+                                </Button>
+                              </div>
+                            </td>
+                          </>
+                        ) : (
+                          <>
+                            <td className="p-2">{item.date}</td>
+                            <td className="p-2">{item.budget.toLocaleString()}원</td>
+                            <td className="p-2">{item.actualCost.toLocaleString()}원</td>
+                            <td className="p-2">
+                              <span className={`font-medium ${
+                                calculateCostRatio(item.budget, item.actualCost) > 80 
+                                  ? 'text-red-600' 
+                                  : 'text-green-600'
+                              }`}>
+                                {calculateCostRatio(item.budget, item.actualCost).toFixed(1)}%
+                              </span>
+                            </td>
+                            <td className="p-2">{item.description || '-'}</td>
+                            <td className="p-2">
+                              <div className="flex gap-1">
+                                <Button 
+                                  onClick={() => handleEditStart(item)} 
+                                  size="sm" 
+                                  variant="outline"
+                                >
+                                  <Edit className="h-3 w-3" />
+                                </Button>
+                                <Button 
+                                  onClick={() => handleDelete(item.id)} 
+                                  size="sm" 
+                                  variant="outline"
+                                  className="text-red-600 hover:text-red-700"
+                                >
+                                  <Trash2 className="h-3 w-3" />
+                                </Button>
+                              </div>
+                            </td>
+                          </>
+                        )}
+                      </tr>
                     ))}
-                  </SelectContent>
-                </Select>
+                  </tbody>
+                </table>
               </div>
-              <div className="md:col-span-2">
-                <Label htmlFor="note">비고</Label>
-                <Textarea
-                  id="note"
-                  value={newHistory.note}
-                  onChange={(e) => setNewHistory({
-                    ...newHistory,
-                    note: e.target.value
-                  })}
-                  placeholder="추가 설명을 입력하세요"
-                  rows={2}
-                />
-              </div>
-            </div>
-            
-            <div className="flex gap-2 mt-4">
-              <Button onClick={handleAddHistory} className="flex-1">
-                추가
-              </Button>
-              <Button 
-                variant="outline" 
-                onClick={() => setIsAdding(false)}
-                className="flex-1"
-              >
-                취소
-              </Button>
-            </div>
+            </CardContent>
           </Card>
-        )}
 
-        {/* 이력 테이블 */}
-        <div className="space-y-4">
-          <h3 className="text-lg font-semibold">투입률 이력</h3>
-          <div className="border rounded-lg overflow-hidden">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>순서</TableHead>
-                  <TableHead>날짜</TableHead>
-                  <TableHead>예산</TableHead>
-                  <TableHead>실제비용</TableHead>
-                  <TableHead>투입률</TableHead>
-                  <TableHead>담당자</TableHead>
-                  <TableHead>변경사유</TableHead>
-                  <TableHead>비고</TableHead>
-                  <TableHead>작업</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {histories.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={9} className="text-center text-gray-500 py-8">
-                      등록된 투입률 이력이 없습니다.
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  histories.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()).map((history, index) => (
-                    <TableRow key={history.id}>
-                      <TableCell className="text-sm">{index + 1}</TableCell>
-                      <TableCell className="text-sm">{history.date}</TableCell>
-                      <TableCell className="text-sm">
-                        {editingId === history.id ? (
-                          <Input
-                            type="text"
-                            value={formatNumberWithCommas(editingHistory?.budget || 0)}
-                            onChange={(e) => {
-                              const rawValue = e.target.value;
-                              const numericValue = parseNumberFromString(rawValue);
-                              if (!isNaN(numericValue) && editingHistory) {
-                                setEditingHistory({
-                                  ...editingHistory,
-                                  budget: numericValue
-                                });
-                              }
-                            }}
-                            className="w-20 text-sm"
-                          />
-                        ) : (
-                          `${history.budget.toLocaleString()}원`
-                        )}
-                      </TableCell>
-                      <TableCell className="text-sm">
-                        {editingId === history.id ? (
-                          <Input
-                            type="text"
-                            value={formatNumberWithCommas(editingHistory?.actualCost || 0)}
-                            onChange={(e) => {
-                              const rawValue = e.target.value;
-                              const numericValue = parseNumberFromString(rawValue);
-                              if (!isNaN(numericValue) && editingHistory) {
-                                setEditingHistory({
-                                  ...editingHistory,
-                                  actualCost: numericValue
-                                });
-                              }
-                            }}
-                            className="w-20 text-sm"
-                          />
-                        ) : (
-                          `${history.actualCost.toLocaleString()}원`
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <Badge className={getCostRatioColor(history.costRatio)}>
-                          {history.costRatio}%
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-sm">{history.manager}</TableCell>
-                      <TableCell className="text-sm">{history.changeReason || '-'}</TableCell>
-                      <TableCell className="text-sm max-w-[150px] truncate" title={history.note || ''}>
-                        {history.note || '-'}
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex gap-1">
-                          {editingId === history.id ? (
-                            <>
-                              <Button size="sm" onClick={handleEditSave}>
-                                저장
-                              </Button>
-                              <Button size="sm" variant="outline" onClick={handleEditCancel}>
-                                취소
-                              </Button>
-                            </>
-                          ) : (
-                            <>
-                              <Button 
-                                size="sm" 
-                                variant="outline"
-                                onClick={() => handleEditStart(history)}
-                              >
-                                <Edit3 className="h-3 w-3" />
-                              </Button>
-                              <Button 
-                                size="sm" 
-                                variant="ghost"
-                                onClick={() => handleDelete(history.id)}
-                              >
-                                <Trash2 className="h-3 w-3" />
-                              </Button>
-                            </>
-                          )}
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
+          {/* 액션 버튼 */}
+          <div className="flex justify-end gap-2 mt-6">
+            <Button onClick={onClose} variant="outline">
+              취소
+            </Button>
+            <Button onClick={handleSaveAndClose} className="bg-blue-600 hover:bg-blue-700">
+              저장 및 닫기
+            </Button>
           </div>
         </div>
-
-        {/* 하단 버튼 */}
-        <div className="flex gap-2 justify-end">
-          <Button variant="outline" onClick={onClose}>
-            닫기
-          </Button>
-          <Button onClick={handleSaveAndClose}>
-            저장 후 닫기
-          </Button>
-        </div>
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 }
