@@ -34,7 +34,7 @@ const WorldMap = dynamic(() => import("@/components/WorldMap"), {
     <div className="w-full h-96 bg-gray-100 rounded-lg flex items-center justify-center">
       <div className="text-center">
         <Map className="h-16 w-16 text-gray-400 mx-auto mb-4" />
-        <p className="text-gray-600 font-medium">지도를 불러오는 중...</p>
+        <div className="text-gray-600 font-medium">지도를 불러오는 중...</div>
       </div>
     </div>
   )
@@ -420,7 +420,7 @@ export default function CompanyOpsDashboard() {
 
             {/* 담당자 정보 섹션 */}
             <div className="border-t pt-4 space-y-4">
-              <div className="text-sm font-medium text-zinc-700 flex items-center gap-2">
+              <div className="text-sm font-medium text-medium text-zinc-700 flex items-center gap-2">
                 <div className="w-2 h-2 bg-green-500 rounded-full"></div>
                 담당자 정보
               </div>
@@ -486,7 +486,8 @@ export default function CompanyOpsDashboard() {
             {/* 비용 정보 섹션 */}
             <div className="border-t pt-4 space-y-4">
               <div className="text-sm font-medium text-zinc-700 flex items-center gap-2">
-                <div className="w-2 h-2 bg-amber-500 rounded-full"></div>
+                <div className="w-2 h-2 bg-amber-500 rounded-full">
+                </div>
                 비용 정보
               </div>
               <div className="grid grid-cols-2 gap-3">
@@ -582,6 +583,7 @@ export default function CompanyOpsDashboard() {
               }}
               onDelete={(id: string) => {
                 setEquipmentHistory(prev => prev.filter(item => item.id !== id));
+                updateLastUpdateTime();
               }}
             />
           </div>
