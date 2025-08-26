@@ -1,112 +1,153 @@
-import { type ClassValue, clsx } from "clsx";
-import { twMerge } from "tailwind-merge";
-import { Project, ProjectStatus } from './types';
-import { STATUS_COLORS, STATUS_LABELS } from './constants';
+// ... existing code ...
 
-// Tailwind CSS 클래스 병합 유틸리티
-export function cn(...inputs: ClassValue[]) {
-  return twMerge(clsx(inputs));
+// Chart.js 안전성 함수들
+export function safeMax(values: number[]): number {
+  if (!Array.isArray(values) || values.length === 0) {
+    return 0;
+  }
+  
+  const validValues = values.filter(v => typeof v === 'number' && !isNaN(v));
+  return validValues.length > 0 ? Math.max(...validValues) : 0;
 }
 
-// 상태별 아이콘과 색상 정보 반환
-export function getStatusInfo(status: ProjectStatus) {
-  switch (status) {
-    case "진행 중(관리필요)":
-      return { 
-        icon: "AlertCircle", 
-        color: STATUS_COLORS["진행 중(관리필요)"], 
-        label: STATUS_LABELS["진행 중(관리필요)"] 
-      };
-    case "진행 중":
-      return { 
-        icon: "TrendingUp", 
-        color: STATUS_COLORS["진행 중"], 
-        label: STATUS_LABELS["진행 중"] 
-      };
-    case "일시 중단":
-      return { 
-        icon: "Clock", 
-        color: STATUS_COLORS["일시 중단"], 
-        label: STATUS_LABELS["일시 중단"] 
-      };
-    case "완료":
-      return { 
-        icon: "CheckCircle", 
-        color: STATUS_COLORS["완료"], 
-        label: STATUS_LABELS["완료"] 
-      };
-    default:
-      return { 
-        icon: "Calendar", 
-        color: STATUS_COLORS["계획"], 
-        label: STATUS_LABELS["계획"] 
-      };
+export function safeMin(values: number[]): number {
+  if (!Array.isArray(values) || values.length === 0) {
+    return 0;
+  }
+  
+  const validValues = values.filter(v => typeof v === 'number' && !isNaN(v));
+  return validValues.length > 0 ? Math.min(...validValues) : 0;
+}
+
+export function safeAverage(values: number[]): number {
+  if (!Array.isArray(values) || values.length === 0) {
+    return 0;
+  }
+  
+  const validValues = values.filter(v => typeof v === 'number' && !isNaN(v));
+  if (validValues.length === 0) return 0;
+  
+  const sum = validValues.reduce((acc, val) => acc + val, 0);
+  return sum / validValues.length;
+}
+
+export function safeNumber(value: any, defaultValue: number = 0): number {
+  if (typeof value === 'number' && !isNaN(value)) {
+    return value;
+  }
+  
+  if (typeof value === 'string') {
+    const parsed = parseFloat(value);
+    return !isNaN(parsed) ? parsed : defaultValue;
+  }
+  
+  return defaultValue;
+}
+
+export function safeRegisterChartJS(ChartJS: any, plugin: any, pluginName: string): boolean {
+  try {
+    if (!ChartJS || !plugin) {
+      console.warn(`Chart.js 또는 ${pluginName} 플러그인이 없습니다.`);
+      return false;
+    }
+    
+    // 이미 등록되어 있는지 확인
+    if (ChartJS.registry && ChartJS.registry.controllers) {
+      const existingControllers = Object.keys(ChartJS.registry.controllers);
+      if (existingControllers.includes(pluginName)) {
+        console.log(`${pluginName}이 이미 등록되어 있습니다.`);
+        return true;
+      }
+    }
+    
+    // 플러그인 등록
+    if (typeof plugin === 'function') {
+      plugin(ChartJS);
+      console.log(`${pluginName} 플러그인이 성공적으로 등록되었습니다.`);
+      return true;
+    } else if (plugin.default && typeof plugin.default === 'function') {
+      plugin.default(ChartJS);
+      console.log(`${pluginName} 플러그인이 성공적으로 등록되었습니다.`);
+      return true;
+    } else {
+      console.warn(`${pluginName} 플러그인 형식이 올바르지 않습니다.`);
+      return false;
+    }
+  } catch (error) {
+    console.error(`${pluginName} 플러그인 등록 중 오류 발생:`, error);
+    return false;
   }
 }
 
-// 한국 원화 포맷팅
-export function formatKRW(value: number): string {
-  return new Intl.NumberFormat("ko-KR").format(value) + "원";
+export function validateChartData(data: any): boolean {
+  try {
+    if (!data || typeof data !== 'object') {
+      return false;
+    }
+    
+    // 기본 구조 확인
+    if (!data.labels || !data.datasets) {
+      return false;
+    }
+    
+    // labels가 배열인지 확인
+    if (!Array.isArray(data.labels)) {
+      return false;
+    }
+    
+    // datasets가 배열인지 확인
+    if (!Array.isArray(data.datasets)) {
+      return false;
+    }
+    
+    // 각 dataset의 기본 속성 확인
+    for (const dataset of data.datasets) {
+      if (!dataset.data || !Array.isArray(dataset.data)) {
+        return false;
+      }
+    }
+    
+    return true;
+  } catch (error) {
+    console.error('차트 데이터 검증 중 오류:', error);
+    return false;
+  }
 }
 
-// 천 단위 구분자 포맷팅 (숫자만)
-export function formatNumberWithCommas(value: number): string {
-  return value.toLocaleString('ko-KR');
+export function validateChartOptions(options: any): boolean {
+  try {
+    if (!options || typeof options !== 'object') {
+      return false;
+    }
+    
+    // 필수 속성들이 존재하는지 확인
+    const requiredProps = ['responsive', 'maintainAspectRatio'];
+    for (const prop of requiredProps) {
+      if (!(prop in options)) {
+        return false;
+      }
+    }
+    
+    return true;
+  } catch (error) {
+    console.error('차트 옵션 검증 중 오류:', error);
+    return false;
+  }
 }
 
-// 쉼표가 포함된 문자열을 숫자로 변환
-export function parseNumberFromString(value: string): number {
-  return Number(value.replace(/,/g, ''));
-}
-
-// 투입률 계산
-export function calculateInvestmentRate(budget: number, actualCost: number): number {
-  if (budget <= 0) return 0;
-  return (actualCost / budget) * 100;
-}
-
-// 투입률에 따른 상태 자동 변경
-export function getAutoStatus(budget: number, actualCost: number): ProjectStatus {
-  if (budget <= 0) return "계획";
+export function handleChartError(error: any, fallbackComponent: React.ReactNode) {
+  console.error('Chart.js 오류 발생:', error);
   
-  const rate = calculateInvestmentRate(budget, actualCost);
-  if (rate > 70) return "진행 중(관리필요)";
-  return "진행 중";
-}
-
-// 날짜 유효성 검사
-export function isValidDate(dateString: string): boolean {
-  const date = new Date(dateString);
-  return date instanceof Date && !isNaN(date.getTime());
-}
-
-// 두 날짜 간의 일수 계산
-export function calculateDaysBetween(startDate: string, endDate: string): number {
-  if (!isValidDate(startDate) || !isValidDate(endDate)) return 0;
+  // 에러 타입별 분류
+  if (error.name === 'TypeError') {
+    if (error.message.includes('Chart')) {
+      console.error('Chart.js 초기화 실패');
+    } else if (error.message.includes('datalabels')) {
+      console.error('차트 플러그인 로드 실패');
+    }
+  } else if (error.name === 'ReferenceError') {
+    console.error('차트 라이브러리를 찾을 수 없음');
+  }
   
-  const start = new Date(startDate);
-  const end = new Date(endDate);
-  const diffTime = Math.abs(end.getTime() - start.getTime());
-  return Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
-}
-
-// 좌표 유효성 검사
-export function isValidCoordinates(lat: number, lng: number): boolean {
-  return (
-    Number.isFinite(lat) &&
-    Number.isFinite(lng) &&
-    lat >= -90 && lat <= 90 &&
-    lng >= -180 && lng <= 180
-  );
-}
-
-// 위도/경도를 SVG 좌표로 변환 (Equirectangular projection)
-export function latLngToSVG(lat: number, lng: number, svgWidth = 1000, svgHeight = 500) {
-  // 경도: -180 ~ 180 -> 0 ~ 1000 (Equirectangular)
-  const x = ((lng + 180) / 360) * svgWidth;
-  
-  // 위도: 90 ~ -90 -> 0 ~ 500 (Equirectangular - 더 정확함)
-  const y = ((90 - lat) / 180) * svgHeight;
-  
-  return { x, y };
+  return fallbackComponent;
 }
