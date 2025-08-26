@@ -66,9 +66,18 @@ export default function CompanyOpsDashboard() {
   const [costHistoryOpen, setCostHistoryOpen] = useState(false);
   const [selectedCostHistory, setSelectedCostHistory] = useState<any | null>(null);
 
+  // 업데이트 시간 관리
+  const [lastUpdateTime, setLastUpdateTime] = useState<Date>(new Date());
+
   // 컴포넌트 마운트 확인
   useEffect(() => {
     setMounted(true);
+    setLastUpdateTime(new Date());
+  }, []);
+
+  // 업데이트 시간 갱신 함수
+  const updateLastUpdateTime = useCallback(() => {
+    setLastUpdateTime(new Date());
   }, []);
 
   // 프로젝트 편집 핸들러
@@ -77,6 +86,7 @@ export default function CompanyOpsDashboard() {
     setSalesManagersInput(p.salesManagers?.join(", ") || "");
     setEquipmentHistory(p.equipmentHistory || []);
     setOpen(true);
+    updateLastUpdateTime();
   }
 
   // 일정 관리 핸들러
@@ -89,6 +99,7 @@ export default function CompanyOpsDashboard() {
       : [];
     setPeople(initialPeople);
     setScheduleOpen(true);
+    updateLastUpdateTime();
   }
 
   // 장비 이력 핸들러
@@ -96,12 +107,14 @@ export default function CompanyOpsDashboard() {
     setSelected({ ...p });
     setEquipmentHistory(p.equipmentHistory || []);
     setEquipmentHistoryOpen(true);
+    updateLastUpdateTime();
   }
 
   // 투입률 이력 관리 핸들러
   function onCostHistory(p: any) {
     setSelectedCostHistory({ ...p });
     setCostHistoryOpen(true);
+    updateLastUpdateTime();
   }
 
   // 신규 프로젝트 생성 핸들러
@@ -132,6 +145,7 @@ export default function CompanyOpsDashboard() {
     setSalesManagersInput(""); // 별도 상태 초기화
     setEquipmentHistory([]); // equipmentHistory 상태도 초기화
     setOpen(true);
+    updateLastUpdateTime();
   }
 
   // 투입률 이력 저장 핸들러
@@ -193,14 +207,16 @@ export default function CompanyOpsDashboard() {
       setSelectedCostHistory(updatedProject);
 
       console.log('투입률 이력 저장 완료');
+      updateLastUpdateTime();
     } else {
       console.error('선택된 프로젝트가 없습니다.');
     }
-  }, [selectedCostHistory]);
+  }, [selectedCostHistory, updateLastUpdateTime]);
 
   // 프로젝트 삭제 핸들러
   function onDelete(id: string) {
     setProjects((prev) => prev.filter((p) => p.id !== id));
+    updateLastUpdateTime();
   }
 
   // 프로젝트 저장 핸들러
@@ -222,6 +238,7 @@ export default function CompanyOpsDashboard() {
     setOpen(false);
     setSelected(null);
     setEquipmentHistory([]);
+    updateLastUpdateTime();
   }
 
   // 일정 저장 핸들러
@@ -232,6 +249,7 @@ export default function CompanyOpsDashboard() {
         prev.map((p) => (p.id === selectedSchedule.id ? updatedProject : p))
       );
       setScheduleOpen(false);
+      updateLastUpdateTime();
     }
   }
 
@@ -245,6 +263,7 @@ export default function CompanyOpsDashboard() {
       progress: 0
     };
     setScheduleItems(prev => [...prev, newItem]);
+    updateLastUpdateTime();
   }
 
   // 일정 항목 업데이트
@@ -254,11 +273,13 @@ export default function CompanyOpsDashboard() {
         item.id === id ? { ...item, [field]: value } : item
       )
     );
+    updateLastUpdateTime();
   }
 
   // 일정 항목 삭제
   function deleteScheduleItem(id: string) {
     setScheduleItems(prev => prev.filter(item => item.id !== id));
+    updateLastUpdateTime();
   }
 
   // 인원 추가
@@ -270,6 +291,7 @@ export default function CompanyOpsDashboard() {
       department: ""
     };
     setPeople(prev => [...prev, newPerson]);
+    updateLastUpdateTime();
   }
 
   // 인원 업데이트
@@ -279,11 +301,13 @@ export default function CompanyOpsDashboard() {
         i === index ? { ...person, [field]: value } : person
       )
     );
+    updateLastUpdateTime();
   }
 
   // 인원 삭제
   function deletePerson(index: number) {
     setPeople(prev => prev.filter((_, i) => i !== index));
+    updateLastUpdateTime();
   }
 
   // 달력 열기
@@ -300,6 +324,7 @@ export default function CompanyOpsDashboard() {
         [dateKey]: status
       }
     }));
+    updateLastUpdateTime();
   }
 
   // 필터링된 프로젝트
@@ -320,6 +345,8 @@ export default function CompanyOpsDashboard() {
         onStatusFilterChange={setStatusFilter}
         onCreate={onCreate}
         onHelpOpen={() => {}}
+        lastUpdateTime={lastUpdateTime}
+        onManualUpdate={updateLastUpdateTime}
       />
 
       {/* 메인 콘텐츠 */}
