@@ -1,7 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import dynamic from 'next/dynamic';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -10,20 +9,10 @@ import { AlertCircle, Plus, Edit, Trash2, Save, X, TrendingUp, DollarSign, Calen
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { CostHistory, Project } from '@/lib/types';
 import { safeMax, safeMin, safeNumber, validateChartData, validateChartOptions } from '@/lib/utils';
-import ChartErrorBoundary from './ChartErrorBoundary';
 
-// Chart.js 컴포넌트를 동적으로 import하여 SSR 비활성화
-const Chart = dynamic(() => import('react-chartjs-2').then(mod => ({ default: mod.Line })), {
-  ssr: false,
-  loading: () => (
-    <div className="h-80 flex items-center justify-center bg-gray-100 rounded-lg">
-      <div className="text-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-        <p className="text-gray-600">차트를 불러오는 중...</p>
-      </div>
-    </div>
-  )
-});
+// ECharts를 동적으로 import
+const ECharts = dynamic(() => import('echarts'), { ssr: false });
+const EChartsReact = dynamic(() => import('echarts-for-react'), { ssr: false });
 
 interface CostHistoryManagerProps {
   projectId: string;
@@ -49,31 +38,14 @@ export default function CostHistoryManager({
   const [editingItem, setEditingItem] = useState<Partial<CostHistory>>({});
   const [chartError, setChartError] = useState<string | null>(null);
   const [isChartReady, setIsChartReady] = useState(false);
+  const chartRef = useRef<any>(null);
 
-  // Chart.js 초기화 함수
-  const initializeChartJS = useCallback(async () => {
-    try {
-      if (typeof window === 'undefined') return;
-
-      const ChartJS = await import('chart.js/auto');
-      const DataLabelsPlugin = await import('chartjs-plugin-datalabels');
-      
-      // 플러그인 안전 등록
-      if (ChartJS.default && DataLabelsPlugin.default) {
-        ChartJS.default.register(DataLabelsPlugin.default);
-        console.log('Chart.js 및 플러그인이 성공적으로 등록되었습니다.');
-        setIsChartReady(true);
-      }
-    } catch (error) {
-      console.error('Chart.js 초기화 실패:', error);
-      setChartError('차트 라이브러리 초기화에 실패했습니다.');
+  // ECharts 초기화
+  useEffect(() => {
+    if (typeof window !== 'undefined' && ECharts) {
+      setIsChartReady(true);
     }
   }, []);
-
-  // 컴포넌트 마운트 시 Chart.js 초기화
-  useEffect(() => {
-    initializeChartJS();
-  }, [initializeChartJS]);
 
   // 현재 값 업데이트 함수
   const updateCurrentValues = useCallback((historyArray: CostHistory[]) => {
@@ -115,13 +87,20 @@ export default function CostHistoryManager({
     }
   }, []);
 
-  // 차트 데이터 생성
-  const chartData = useMemo(() => {
+  // ECharts 옵션 생성
+  const chartOption = useMemo(() => {
     try {
       if (!Array.isArray(history) || history.length === 0) {
         return {
-          labels: [],
-          datasets: []
+          title: {
+            text: '투입률 이력이 없습니다',
+            left: 'center',
+            top: 'center',
+            textStyle: {
+              color: '#999',
+              fontSize: 16
+            }
+          }
         };
       }
 
@@ -130,87 +109,101 @@ export default function CostHistoryManager({
         new Date(a.date).getTime() - new Date(b.date).getTime()
       );
 
-      const data = {
-        labels: sortedHistory.map(h => h.date),
-        datasets: [
+      const dates = sortedHistory.map(h => h.date);
+      const budgets = sortedHistory.map(h => h.budget);
+      const actualCosts = sortedHistory.map(h => h.actualCost);
+
+      return {
+        title: {
+          text: '투입률 추이',
+          left: 'center',
+          textStyle: {
+            fontSize: 16,
+            fontWeight: 'bold'
+          }
+        },
+        tooltip: {
+          trigger: 'axis',
+          formatter: function(params: any) {
+            const budget = params[0]?.value || 0;
+            const actualCost = params[1]?.value || 0;
+            const ratio = budget > 0 ? (actualCost / budget * 100).toFixed(1) : 0;
+            
+            return `${params[0].axisValue}<br/>
+                    예산: ${budget.toLocaleString()}원<br/>
+                    실제비용: ${actualCost.toLocaleString()}원<br/>
+                    투입률: ${ratio}%`;
+          }
+        },
+        legend: {
+          data: ['예산', '실제 비용'],
+          top: 30
+        },
+        grid: {
+          left: '3%',
+          right: '4%',
+          bottom: '3%',
+          containLabel: true
+        },
+        xAxis: {
+          type: 'category',
+          data: dates,
+          axisLabel: {
+            rotate: 45
+          }
+        },
+        yAxis: {
+          type: 'value',
+          axisLabel: {
+            formatter: function(value: number) {
+              return (value / 1000000).toFixed(0) + 'M';
+            }
+          }
+        },
+        series: [
           {
-            label: '예산',
-            data: sortedHistory.map(h => h.budget),
-            borderColor: 'rgb(59, 130, 246)',
-            backgroundColor: 'rgba(59, 130, 246, 0.1)',
-            tension: 0.1,
-            fill: false
+            name: '예산',
+            type: 'line',
+            data: budgets,
+            itemStyle: {
+              color: '#3B82F6'
+            },
+            lineStyle: {
+              width: 3
+            },
+            symbol: 'circle',
+            symbolSize: 8
           },
           {
-            label: '실제 비용',
-            data: sortedHistory.map(h => h.actualCost),
-            borderColor: 'rgb(239, 68, 68)',
-            backgroundColor: 'rgba(239, 68, 68, 0.1)',
-            tension: 0.1,
-            fill: false
+            name: '실제 비용',
+            type: 'line',
+            data: actualCosts,
+            itemStyle: {
+              color: '#EF4444'
+            },
+            lineStyle: {
+              width: 3
+            },
+            symbol: 'circle',
+            symbolSize: 8
           }
         ]
       };
-
-      // 데이터 유효성 검사
-      if (!validateChartData(data)) {
-        console.warn('차트 데이터 유효성 검사 실패');
-        return { labels: [], datasets: [] };
-      }
-
-      return data;
     } catch (error) {
-      console.error('차트 데이터 생성 중 오류:', error);
-      return { labels: [], datasets: [] };
-    }
-  }, [history]);
-
-  // 차트 옵션 생성
-  const chartOptions = useMemo(() => {
-    try {
-      const options = {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: {
-          datalabels: {
-            display: true,
-            color: '#374151',
-            font: {
-              weight: 'bold'
-            },
-            formatter: (value: number) => {
-              return value.toLocaleString();
-            }
-          },
-          legend: {
-            display: true,
-            position: 'top' as const
-          }
-        },
-        scales: {
-          y: {
-            beginAtZero: true,
-            ticks: {
-              callback: (value: number) => {
-                return value.toLocaleString();
-              }
-            }
+      console.error('차트 옵션 생성 중 오류:', error);
+      return {
+        title: {
+          text: '차트 생성 중 오류가 발생했습니다',
+          left: 'center',
+          top: 'center',
+          textStyle: {
+            color: '#EF4444',
+            fontSize: 16
           }
         }
       };
-
-      // 옵션 유효성 검사
-      if (!validateChartOptions(options)) {
-        console.warn('차트 옵션 유효성 검사 실패');
-        return {};
-      }
-
-      return options;
-    } catch (error) {
-      console.error('차트 옵션 생성 중 오류:', error);
-      return {};
     }
-  }, []);
+  }, [history]);
 
   // 안전한 최대 예산 계산
   const getSafeMaxBudget = useCallback(() => {
@@ -304,7 +297,7 @@ export default function CostHistoryManager({
 
   // 차트 에러 처리
   const handleChartError = useCallback((error: Error) => {
-    console.error('Chart.js 렌더링 오류:', error);
+    console.error('ECharts 렌더링 오류:', error);
     setChartError('차트를 표시할 수 없습니다.');
   }, []);
 
@@ -381,11 +374,22 @@ export default function CostHistoryManager({
             </CardHeader>
             <CardContent>
               <div className="h-80">
-                <ChartErrorBoundary onError={handleChartError}>
-                  {isChartReady && Chart && (
-                    <Chart data={chartData} options={chartOptions} />
-                  )}
-                </ChartErrorBoundary>
+                {isChartReady && EChartsReact ? (
+                  <EChartsReact
+                    option={chartOption}
+                    style={{ height: '100%', width: '100%' }}
+                    onEvents={{
+                      error: handleChartError
+                    }}
+                  />
+                ) : (
+                  <div className="h-full flex items-center justify-center bg-gray-100 rounded-lg">
+                    <div className="text-center">
+                      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+                      <p className="text-gray-600">차트를 불러오는 중...</p>
+                    </div>
+                  </div>
+                )}
               </div>
             </CardContent>
           </Card>
