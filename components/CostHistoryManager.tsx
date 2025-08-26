@@ -1,18 +1,14 @@
 'use client';
 
-import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import React, { useState, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { AlertCircle, Plus, Edit, Trash2, Save, X, TrendingUp, DollarSign, Calendar } from 'lucide-react';
+import { AlertCircle, Plus, Edit, Trash2, Save, X, TrendingUp, DollarSign, Calendar, BarChart3 } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { CostHistory, Project } from '@/lib/types';
-import { safeMax, safeMin, safeNumber, validateChartData, validateChartOptions } from '@/lib/utils';
-
-// ECharts를 동적으로 import
-const ECharts = dynamic(() => import('echarts'), { ssr: false });
-const EChartsReact = dynamic(() => import('echarts-for-react'), { ssr: false });
+import { safeMax, safeMin, safeNumber } from '@/lib/utils';
 
 interface CostHistoryManagerProps {
   projectId: string;
@@ -36,16 +32,6 @@ export default function CostHistoryManager({
   const [history, setHistory] = useState<CostHistory[]>(costHistory);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingItem, setEditingItem] = useState<Partial<CostHistory>>({});
-  const [chartError, setChartError] = useState<string | null>(null);
-  const [isChartReady, setIsChartReady] = useState(false);
-  const chartRef = useRef<any>(null);
-
-  // ECharts 초기화
-  useEffect(() => {
-    if (typeof window !== 'undefined' && ECharts) {
-      setIsChartReady(true);
-    }
-  }, []);
 
   // 현재 값 업데이트 함수
   const updateCurrentValues = useCallback((historyArray: CostHistory[]) => {
@@ -87,144 +73,22 @@ export default function CostHistoryManager({
     }
   }, []);
 
-  // ECharts 옵션 생성
-  const chartOption = useMemo(() => {
-    try {
-      if (!Array.isArray(history) || history.length === 0) {
-        return {
-          title: {
-            text: '투입률 이력이 없습니다',
-            left: 'center',
-            top: 'center',
-            textStyle: {
-              color: '#999',
-              fontSize: 16
-            }
-          }
-        };
-      }
-
-      // 날짜순으로 정렬 (최신이 뒤로)
-      const sortedHistory = [...history].sort((a, b) => 
-        new Date(a.date).getTime() - new Date(b.date).getTime()
-      );
-
-      const dates = sortedHistory.map(h => h.date);
-      const budgets = sortedHistory.map(h => h.budget);
-      const actualCosts = sortedHistory.map(h => h.actualCost);
-
-      return {
-        title: {
-          text: '투입률 추이',
-          left: 'center',
-          textStyle: {
-            fontSize: 16,
-            fontWeight: 'bold'
-          }
-        },
-        tooltip: {
-          trigger: 'axis',
-          formatter: function(params: any) {
-            const budget = params[0]?.value || 0;
-            const actualCost = params[1]?.value || 0;
-            const ratio = budget > 0 ? (actualCost / budget * 100).toFixed(1) : 0;
-            
-            return `${params[0].axisValue}<br/>
-                    예산: ${budget.toLocaleString()}원<br/>
-                    실제비용: ${actualCost.toLocaleString()}원<br/>
-                    투입률: ${ratio}%`;
-          }
-        },
-        legend: {
-          data: ['예산', '실제 비용'],
-          top: 30
-        },
-        grid: {
-          left: '3%',
-          right: '4%',
-          bottom: '3%',
-          containLabel: true
-        },
-        xAxis: {
-          type: 'category',
-          data: dates,
-          axisLabel: {
-            rotate: 45
-          }
-        },
-        yAxis: {
-          type: 'value',
-          axisLabel: {
-            formatter: function(value: number) {
-              return (value / 1000000).toFixed(0) + 'M';
-            }
-          }
-        },
-        series: [
-          {
-            name: '예산',
-            type: 'line',
-            data: budgets,
-            itemStyle: {
-              color: '#3B82F6'
-            },
-            lineStyle: {
-              width: 3
-            },
-            symbol: 'circle',
-            symbolSize: 8
-          },
-          {
-            name: '실제 비용',
-            type: 'line',
-            data: actualCosts,
-            itemStyle: {
-              color: '#EF4444'
-            },
-            lineStyle: {
-              width: 3
-            },
-            symbol: 'circle',
-            symbolSize: 8
-          }
-        ]
-      };
-    } catch (error) {
-      console.error('차트 옵션 생성 중 오류:', error);
-      return {
-        title: {
-          text: '차트 생성 중 오류가 발생했습니다',
-          left: 'center',
-          top: 'center',
-          textStyle: {
-            color: '#EF4444',
-            fontSize: 16
-          }
-        }
-      };
+  // 투입률 상태에 따른 색상 및 아이콘
+  const getCostRatioDisplay = useCallback((budget: number, actualCost: number) => {
+    const ratio = calculateCostRatio(budget, actualCost);
+    
+    if (ratio >= 95) {
+      return { color: 'text-red-600', bgColor: 'bg-red-50', icon: '🔴', status: '위험' };
+    } else if (ratio >= 80) {
+      return { color: 'text-orange-600', bgColor: 'bg-orange-50', icon: '🟠', status: '주의' };
+    } else if (ratio >= 70) {
+      return { color: 'text-yellow-600', bgColor: 'bg-yellow-50', icon: '🟡', status: '관리필요' };
+    } else if (ratio > 0) {
+      return { color: 'text-green-600', bgColor: 'bg-green-50', icon: '🟢', status: '정상' };
+    } else {
+      return { color: 'text-gray-600', bgColor: 'bg-gray-50', icon: '⚪', status: '계획' };
     }
-  }, [history]);
-
-  // 안전한 최대 예산 계산
-  const getSafeMaxBudget = useCallback(() => {
-    try {
-      if (!Array.isArray(history) || history.length === 0) {
-        return Math.max(currentBudget, currentActualCost, 1000000);
-      }
-      
-      const budgets = history.map(h => h.budget).filter(b => b > 0);
-      const actualCosts = history.map(h => h.actualCost).filter(c => c > 0);
-      
-      const maxBudget = safeMax(budgets);
-      const maxActualCost = safeMax(actualCosts);
-      const currentMax = Math.max(currentBudget, currentActualCost);
-      
-      return Math.max(maxBudget, maxActualCost, currentMax, 1000000);
-    } catch (error) {
-      console.error('최대 예산 계산 중 오류:', error);
-      return Math.max(currentBudget, currentActualCost, 1000000);
-    }
-  }, [history, currentBudget, currentActualCost]);
+  }, [calculateCostRatio]);
 
   // 이력 추가 핸들러
   const handleAddHistory = useCallback(() => {
@@ -295,26 +159,21 @@ export default function CostHistoryManager({
     }
   }, [history, onSave, onClose]);
 
-  // 차트 에러 처리
-  const handleChartError = useCallback((error: Error) => {
-    console.error('ECharts 렌더링 오류:', error);
-    setChartError('차트를 표시할 수 없습니다.');
-  }, []);
-
-  if (chartError) {
-    return (
-      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-        <div className="bg-white rounded-lg p-6 max-w-md w-full">
-          <div className="text-center">
-            <AlertCircle className="h-16 w-16 text-red-400 mx-auto mb-4" />
-            <h3 className="text-lg font-semibold text-red-800 mb-2">차트 오류</h3>
-            <p className="text-red-600 text-sm mb-4">{chartError}</p>
-            <Button onClick={onClose} variant="outline">닫기</Button>
-          </div>
-        </div>
-      </div>
-    );
-  }
+  // 통계 계산
+  const stats = useMemo(() => {
+    if (history.length === 0) return null;
+    
+    const totalBudget = history.reduce((sum, item) => sum + item.budget, 0);
+    const totalActualCost = history.reduce((sum, item) => sum + item.actualCost, 0);
+    const avgCostRatio = totalBudget > 0 ? (totalActualCost / totalBudget) * 100 : 0;
+    
+    return {
+      totalBudget,
+      totalActualCost,
+      avgCostRatio,
+      historyCount: history.length
+    };
+  }, [history]);
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
@@ -364,35 +223,37 @@ export default function CostHistoryManager({
             </Card>
           </div>
 
-          {/* 차트 */}
-          <Card className="mb-6">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <TrendingUp className="h-5 w-5 text-blue-600" />
-                투입률 추이
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="h-80">
-                {isChartReady && EChartsReact ? (
-                  <EChartsReact
-                    option={chartOption}
-                    style={{ height: '100%', width: '100%' }}
-                    onEvents={{
-                      error: handleChartError
-                    }}
-                  />
-                ) : (
-                  <div className="h-full flex items-center justify-center bg-gray-100 rounded-lg">
-                    <div className="text-center">
-                      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-                      <p className="text-gray-600">차트를 불러오는 중...</p>
-                    </div>
+          {/* 통계 요약 */}
+          {stats && (
+            <Card className="mb-6">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <BarChart3 className="h-5 w-5 text-purple-600" />
+                  이력 통계
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
+                  <div>
+                    <div className="text-2xl font-bold text-blue-600">{stats.historyCount}</div>
+                    <div className="text-sm text-gray-500">총 이력 수</div>
                   </div>
-                )}
-              </div>
-            </CardContent>
-          </Card>
+                  <div>
+                    <div className="text-2xl font-bold text-green-600">{(stats.totalBudget / 1000000).toFixed(1)}M</div>
+                    <div className="text-sm text-gray-500">총 예산</div>
+                  </div>
+                  <div>
+                    <div className="text-2xl font-bold text-red-600">{(stats.totalActualCost / 1000000).toFixed(1)}M</div>
+                    <div className="text-sm text-gray-500">총 실제비용</div>
+                  </div>
+                  <div>
+                    <div className="text-2xl font-bold text-purple-600">{stats.avgCostRatio.toFixed(1)}%</div>
+                    <div className="text-sm text-gray-500">평균 투입률</div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
           {/* 이력 관리 */}
           <Card>
@@ -412,112 +273,134 @@ export default function CostHistoryManager({
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="border-b">
-                      <th className="text-left p-2">날짜</th>
-                      <th className="text-left p-2">예산</th>
-                      <th className="text-left p-2">실제 비용</th>
-                      <th className="text-left p-2">투입률</th>
-                      <th className="text-left p-2">비고</th>
-                      <th className="text-left p-2">작업</th>
+                    <tr className="border-b bg-gray-50">
+                      <th className="text-left p-3 font-semibold">날짜</th>
+                      <th className="text-left p-3 font-semibold">예산</th>
+                      <th className="text-left p-3 font-semibold">실제 비용</th>
+                      <th className="text-left p-3 font-semibold">투입률</th>
+                      <th className="text-left p-3 font-semibold">상태</th>
+                      <th className="text-left p-3 font-semibold">비고</th>
+                      <th className="text-left p-3 font-semibold">작업</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {history.map((item) => (
-                      <tr key={item.id} className="border-b hover:bg-gray-50">
-                        {editingId === item.id ? (
-                          <>
-                            <td className="p-2">
-                              <Input
-                                type="date"
-                                value={editingItem.date || ''}
-                                onChange={(e) => setEditingItem(prev => ({ ...prev, date: e.target.value }))}
-                              />
-                            </td>
-                            <td className="p-2">
-                              <Input
-                                type="number"
-                                value={editingItem.budget || ''}
-                                onChange={(e) => setEditingItem(prev => ({ ...prev, budget: Number(e.target.value) }))}
-                              />
-                            </td>
-                            <td className="p-2">
-                              <Input
-                                type="number"
-                                value={editingItem.actualCost || ''}
-                                onChange={(e) => setEditingItem(prev => ({ ...prev, actualCost: Number(e.target.value) }))}
-                              />
-                            </td>
-                            <td className="p-2">
-                              {editingItem.budget && editingItem.actualCost
-                                ? `${calculateCostRatio(editingItem.budget, editingItem.actualCost).toFixed(1)}%`
-                                : '-'
-                              }
-                            </td>
-                            <td className="p-2">
-                              <Input
-                                value={editingItem.description || ''}
-                                onChange={(e) => setEditingItem(prev => ({ ...prev, description: e.target.value }))}
-                                placeholder="비고"
-                              />
-                            </td>
-                            <td className="p-2">
-                              <div className="flex gap-1">
-                                <Button onClick={handleEditSave} size="sm" className="bg-green-600 hover:bg-green-700">
-                                  <Save className="h-3 w-3" />
-                                </Button>
-                                <Button 
-                                  onClick={() => {
-                                    setEditingId(null);
-                                    setEditingItem({});
-                                  }} 
-                                  size="sm" 
-                                  variant="outline"
-                                >
-                                  <X className="h-3 w-3" />
-                                </Button>
-                              </div>
-                            </td>
-                          </>
-                        ) : (
-                          <>
-                            <td className="p-2">{item.date}</td>
-                            <td className="p-2">{item.budget.toLocaleString()}원</td>
-                            <td className="p-2">{item.actualCost.toLocaleString()}원</td>
-                            <td className="p-2">
-                              <span className={`font-medium ${
-                                calculateCostRatio(item.budget, item.actualCost) > 80 
-                                  ? 'text-red-600' 
-                                  : 'text-green-600'
-                              }`}>
-                                {calculateCostRatio(item.budget, item.actualCost).toFixed(1)}%
-                              </span>
-                            </td>
-                            <td className="p-2">{item.description || '-'}</td>
-                            <td className="p-2">
-                              <div className="flex gap-1">
-                                <Button 
-                                  onClick={() => handleEditStart(item)} 
-                                  size="sm" 
-                                  variant="outline"
-                                >
-                                  <Edit className="h-3 w-3" />
-                                </Button>
-                                <Button 
-                                  onClick={() => handleDelete(item.id)} 
-                                  size="sm" 
-                                  variant="outline"
-                                  className="text-red-600 hover:text-red-700"
-                                >
-                                  <Trash2 className="h-3 w-3" />
-                                </Button>
-                              </div>
-                            </td>
-                          </>
-                        )}
-                      </tr>
-                    ))}
+                    {history.map((item) => {
+                      const ratioDisplay = getCostRatioDisplay(item.budget, item.actualCost);
+                      return (
+                        <tr key={item.id} className="border-b hover:bg-gray-50">
+                          {editingId === item.id ? (
+                            <>
+                              <td className="p-3">
+                                <Input
+                                  type="date"
+                                  value={editingItem.date || ''}
+                                  onChange={(e) => setEditingItem(prev => ({ ...prev, date: e.target.value }))}
+                                />
+                              </td>
+                              <td className="p-3">
+                                <Input
+                                  type="number"
+                                  value={editingItem.budget || ''}
+                                  onChange={(e) => setEditingItem(prev => ({ ...prev, budget: Number(e.target.value) }))}
+                                />
+                              </td>
+                              <td className="p-3">
+                                <Input
+                                  type="number"
+                                  value={editingItem.actualCost || ''}
+                                  onChange={(e) => setEditingItem(prev => ({ ...prev, actualCost: Number(e.target.value) }))}
+                                />
+                              </td>
+                              <td className="p-3">
+                                {editingItem.budget && editingItem.actualCost
+                                  ? `${calculateCostRatio(editingItem.budget, editingItem.actualCost).toFixed(1)}%`
+                                  : '-'
+                                }
+                              </td>
+                              <td className="p-3">
+                                {editingItem.budget && editingItem.actualCost ? (
+                                  <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${getCostRatioDisplay(editingItem.budget, editingItem.actualCost).bgColor}`}>
+                                    {getCostRatioDisplay(editingItem.budget, editingItem.actualCost).icon}
+                                    {getCostRatioDisplay(editingItem.budget, editingItem.actualCost).status}
+                                  </span>
+                                ) : '-'}
+                              </td>
+                              <td className="p-3">
+                                <Input
+                                  value={editingItem.description || ''}
+                                  onChange={(e) => setEditingItem(prev => ({ ...prev, description: e.target.value }))}
+                                  placeholder="비고"
+                                />
+                              </td>
+                              <td className="p-3">
+                                <div className="flex gap-1">
+                                  <Button onClick={handleEditSave} size="sm" className="bg-green-600 hover:bg-green-700">
+                                    <Save className="h-3 w-3" />
+                                  </Button>
+                                  <Button 
+                                    onClick={() => {
+                                      setEditingId(null);
+                                      setEditingItem({});
+                                    }} 
+                                    size="sm" 
+                                    variant="outline"
+                                  >
+                                    <X className="h-3 w-3" />
+                                  </Button>
+                                </div>
+                              </td>
+                            </>
+                          ) : (
+                            <>
+                              <td className="p-3 font-medium">{item.date}</td>
+                              <td className="p-3">{item.budget.toLocaleString()}원</td>
+                              <td className="p-3">{item.actualCost.toLocaleString()}원</td>
+                              <td className="p-3">
+                                <span className={`font-bold ${ratioDisplay.color}`}>
+                                  {calculateCostRatio(item.budget, item.actualCost).toFixed(1)}%
+                                </span>
+                              </td>
+                              <td className="p-3">
+                                <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${ratioDisplay.bgColor}`}>
+                                  {ratioDisplay.icon}
+                                  {ratioDisplay.status}
+                                </span>
+                              </td>
+                              <td className="p-3">{item.description || '-'}</td>
+                              <td className="p-3">
+                                <div className="flex gap-1">
+                                  <Button 
+                                    onClick={() => handleEditStart(item)} 
+                                    size="sm" 
+                                    variant="outline"
+                                  >
+                                    <Edit className="h-3 w-3" />
+                                  </Button>
+                                  <Button 
+                                    onClick={() => handleDelete(item.id)} 
+                                    size="sm" 
+                                    variant="outline"
+                                    className="text-red-600 hover:text-red-700"
+                                  >
+                                    <Trash2 className="h-3 w-3" />
+                                  </Button>
+                                </div>
+                              </td>
+                            </>
+                          )}
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
+                
+                {history.length === 0 && (
+                  <div className="text-center py-8 text-gray-500">
+                    <Calendar className="h-12 w-12 mx-auto mb-2 text-gray-300" />
+                    <p>아직 투입률 이력이 없습니다.</p>
+                    <p className="text-sm">"이력 추가" 버튼을 클릭하여 첫 번째 이력을 추가해보세요.</p>
+                  </div>
+                )}
               </div>
             </CardContent>
           </Card>
