@@ -3,7 +3,23 @@
 import React, { useState, useMemo } from 'react';
 import { Marker, Popup } from 'react-leaflet';
 import { Project } from '@/lib/types';
-import { getStatusInfo } from '@/lib/utils';
+// 상태별 정보를 직접 정의
+const getStatusInfo = (status: string) => {
+  switch (status) {
+    case '계획':
+      return { color: 'text-blue-600', bgColor: 'bg-blue-50', icon: '📋' };
+    case '진행 중':
+      return { color: 'text-green-600', bgColor: 'bg-green-50', icon: '🚀' };
+    case '진행 중(관리필요)':
+      return { color: 'text-amber-600', bgColor: 'bg-amber-50', icon: '⚠️' };
+    case '일시 중단':
+      return { color: 'text-red-600', bgColor: 'bg-red-50', icon: '⏸️' };
+    case '완료':
+      return { color: 'text-purple-600', bgColor: 'bg-purple-50', icon: '✅' };
+    default:
+      return { color: 'text-gray-600', bgColor: 'bg-gray-50', icon: '❓' };
+  }
+};
 
 // Leaflet 아이콘 생성을 위한 함수 (훅 제거)
 const iconCache: Record<string, any> = {};
